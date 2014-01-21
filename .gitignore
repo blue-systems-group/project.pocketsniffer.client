@@ -1,0 +1,6 @@
+/gen
+/bin
+/.classpath
+/.settings
+/cscope.*
+/local.properties
