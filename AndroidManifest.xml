@@ -7,6 +7,7 @@
         <service android:name=".AdminService">
           <intent-filter>
             <action android:name="edu.buffalo.cse.pocketadmin.AdminService" />
+            <action android:name="android.intent.action.BOOT_COMPLETE" />
           </intent-filter>
         </service>
     </application>
@@ -14,4 +15,5 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
 </manifest>

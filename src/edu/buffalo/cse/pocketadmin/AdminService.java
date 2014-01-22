@@ -10,6 +10,7 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import android.app.AlarmManager;
 import android.app.PendingIntent;
 import android.app.Service;
 import android.content.BroadcastReceiver;
@@ -22,8 +23,8 @@ import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.IBinder;
+import android.os.SystemClock;
 import android.util.Log;
-
 
 public class AdminService extends Service {
     private final String TAG = "PocketAdmin-" + this.getClass().getSimpleName();
@@ -34,6 +35,9 @@ public class AdminService extends Service {
     private final int PRIORITY = 99999999;
 
     private final int PORT = 1688;
+    private final int INTERVAL_MS = 60 * 1000;
+
+    private boolean started = false;
 
     private String checkIntentName = this.getClass().getName() + ".Check";
     private IntentFilter checkIntentFilter = new IntentFilter(checkIntentName);
@@ -41,7 +45,7 @@ public class AdminService extends Service {
     private BroadcastReceiver checkReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            Log.v(TAG, "Checking...");
+            Log.v(TAG, "Start checking...");
 
             WifiManager wifiManager = (WifiManager) getSystemService(Context.WIFI_SERVICE);
 
@@ -51,6 +55,7 @@ public class AdminService extends Service {
             }
 
 
+            // ssid with quotes
             String ssid = "\"" + SSID + "\"";
 
             WifiInfo wifiInfo = wifiManager.getConnectionInfo();
@@ -81,7 +86,7 @@ public class AdminService extends Service {
                     Log.v(TAG, "No PocketAdmin Wifi found.");
                 }
 
-                /* In both cases, we need to wait for next check
+                /* In both cases, we need to wait for next check interval
                  *  1) If we just initiated reconnection, the device need some
                  *  time to connect
                  *  2) Or we need to wait for PocketAdmin Wifi
@@ -90,11 +95,12 @@ public class AdminService extends Service {
                 return;
             }
 
-            /* At this point, we'r connected to PocketAdmin Wifi */
+            /* At this point, we're connected to PocketAdmin Wifi */
 
             DhcpInfo dhcpInfo = wifiManager.getDhcpInfo();
             InetAddress addr = int2Addr(dhcpInfo.gateway);
-            Log.v(TAG, "Sending msg to " + addr.toString());
+
+            Log.v(TAG, "Connected to PocketAdmin Wifi, sending msg to " + addr.toString());
 
             try {
                 Socket socket = new Socket(addr, PORT);
@@ -107,7 +113,6 @@ public class AdminService extends Service {
                 Log.e(TAG, "Faild to send msg to router: " + e.getMessage());
             }
         }
-
     };
 
 
@@ -209,26 +214,51 @@ public class AdminService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        super.onStartCommand(intent, flags, startId);
+        if (started) {
+            Log.v(TAG, "Not restarting started service");
+            return START_STICKY;
+        }
 
-        Log.v(TAG, "Service started");
+        Log.v(TAG, "======== Starting PocketAdmin Service ======== ");
+
+        super.onStartCommand(intent, flags, startId);
 
         registerReceiver(checkReceiver, checkIntentFilter);
 
+        startPeriodic();
 
+        started = true;
         return START_STICKY;
+    }
+
+    private void startPeriodic() {
+        AlarmManager alarmManager = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
+        alarmManager.setInexactRepeating(AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                SystemClock.elapsedRealtime() + INTERVAL_MS, INTERVAL_MS, checkPendingIntent);
+    }
+
+    private void stopAlarm() {
+        AlarmManager alarmManager = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
+        alarmManager.cancel(checkPendingIntent);
     }
 
     @Override
     public void onDestroy() {
-        // TODO Auto-generated method stub
         super.onDestroy();
+        Log.v(TAG, "======== Destroying PocketAdmin Service ========");
+
+        unregisterReceiver(checkReceiver);
+        stopAlarm();
     }
 
     @Override
     public void onCreate() {
-        // TODO Auto-generated method stub
         super.onCreate();
+
+        Log.v(TAG, "======== Creating PocketAdmin Service ========");
+
+        checkPendingIntent = PendingIntent.getBroadcast(this, 0, 
+                new Intent(checkIntentName), PendingIntent.FLAG_UPDATE_CURRENT);
     }
 
     @Override
@@ -236,5 +266,4 @@ public class AdminService extends Service {
         // TODO Auto-generated method stub
         return null;
     }
-
 }
