@@ -50,24 +50,21 @@ public class AdminService extends Service {
             WifiManager wifiManager = (WifiManager) getSystemService(Context.WIFI_SERVICE);
 
             if (!wifiManager.isWifiEnabled()) {
-                Log.v(TAG, "Wifi not enabled");
+                Log.d(TAG, "Wifi not enabled");
                 return;
             }
 
 
-            // ssid with quotes
-            String ssid = "\"" + SSID + "\"";
-
             WifiInfo wifiInfo = wifiManager.getConnectionInfo();
-            // SSID in WifiInfo has quotes
-            if (!wifiInfo.getSSID().equals(ssid)) {
-                Log.v(TAG, "Currently connected to " + wifiInfo.getSSID());
+            String currentSSID = removeQuotes(wifiInfo.getSSID());
+
+            if (!currentSSID.equals(SSID)) {
+                Log.d(TAG, "Currently connected to " + wifiInfo.getSSID());
 
                 boolean found = false;
 
                 List<ScanResult> scanResults = wifiManager.getScanResults();
                 for (ScanResult result : scanResults) {
-                    // SSID in ScanResults does NOT have quotes
                     if (result.SSID.equals(SSID)) {
                         found = true;
                         break;
@@ -75,7 +72,7 @@ public class AdminService extends Service {
                 }
 
                 if (found) {
-                    Log.v(TAG, "Found PocketAdmin Wifi, connecting...");
+                    Log.d(TAG, "Found PocketAdmin Wifi, connecting...");
 
                     int networkId = addConfiguration();
                     wifiManager.disconnect();
@@ -100,7 +97,7 @@ public class AdminService extends Service {
             DhcpInfo dhcpInfo = wifiManager.getDhcpInfo();
             InetAddress addr = int2Addr(dhcpInfo.gateway);
 
-            Log.v(TAG, "Connected to PocketAdmin Wifi, sending msg to " + addr.toString());
+            Log.d(TAG, "Connected to PocketAdmin Wifi, sending msg to " + addr.toString());
 
             try {
                 Socket socket = new Socket(addr, PORT);
@@ -136,6 +133,11 @@ public class AdminService extends Service {
                 json.put("level", result.level);
                 json.put("timestamp", result.timestamp);
                 results.put(json);
+
+                /* indicate the channel that device is using */
+                if (result.BSSID.equals(wifiInfo.getBSSID())) {
+                    msg.put("frequency", result.frequency);
+                }
             }
 
             msg.put("results", results);
@@ -165,50 +167,36 @@ public class AdminService extends Service {
         }
     }
 
+    private String removeQuotes(String s) {
+        if (s.startsWith("\"") && s.endsWith("\"")) {
+            return s.substring(1, s.length()-1);
+        }
+        return s;
+    }
+
+    private String addQuotes(String s) {
+        return "\"" + s + "\"";
+    }
+
     /* Create wifi configuration for PocketAdmin Wifi if not exists already
      * return its networkId
      */
     private int addConfiguration() {
-        String ssid = "\"" + SSID + "\"";
 
         WifiManager wifiManager = (WifiManager) getSystemService(Context.WIFI_SERVICE);
         List<WifiConfiguration> configurationList = wifiManager.getConfiguredNetworks();
         for (WifiConfiguration con : configurationList) {
-            // SSID in WifiConfiguration has quotes
-            if (con.SSID.equals(ssid)) {
+            if (removeQuotes(con.SSID).equals(SSID)) {
                 return con.networkId;
             }
         }
 
         WifiConfiguration config = new WifiConfiguration();
-        config.SSID = ssid;
-        // psk also has quotes
-        config.preSharedKey = "\"" + PASSWORD + "\"";
+        config.SSID = addQuotes(SSID);
+        config.preSharedKey = addQuotes(PASSWORD);
         config.priority = PRIORITY;
 
-        wifiManager.addNetwork(config);
-
-        /* From doc
-         *
-         *  "It is possible for this method to change the network IDs of existing
-         *  networks. You should assume the network IDs can be different after
-         *  calling this method."
-         *
-         * So we reload the configuration list to get the correct network id
-         * 
-         */
-        wifiManager.saveConfiguration();
-
-        configurationList = wifiManager.getConfiguredNetworks();
-        for (WifiConfiguration con : configurationList) {
-            if (con.SSID.equals(ssid)) {
-                return con.networkId;
-            }
-        }
-
-        // Shouldn't be here
-        Log.e(TAG, "Can not find networkId");
-        return 0;
+        return wifiManager.addNetwork(config);
     }
 
 
@@ -249,6 +237,20 @@ public class AdminService extends Service {
 
         unregisterReceiver(checkReceiver);
         stopAlarm();
+
+        /* remove the PocketAdmin network configration */
+        /* TODO when uninstalled, onDestroy is not called, need to figure out
+         * how to delete this configuration in that case */
+        WifiManager wifiManager = (WifiManager) getSystemService(Context.WIFI_SERVICE);
+        List<WifiConfiguration> configurationList = wifiManager.getConfiguredNetworks();
+        for (WifiConfiguration con : configurationList) {
+            if (removeQuotes(con.SSID).equals(SSID)) {
+                wifiManager.removeNetwork(con.networkId);
+                wifiManager.disconnect();
+                wifiManager.reconnect();
+                break;
+            }
+        }
     }
 
     @Override
