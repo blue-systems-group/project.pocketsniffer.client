@@ -4,16 +4,24 @@
       android:versionCode="1"
       android:versionName="1.0">
     <application android:label="@string/app_name" android:icon="@drawable/ic_launcher">
-        <service android:name=".AdminService">
-          <intent-filter>
-            <action android:name="edu.buffalo.cse.pocketadmin.AdminService" />
-            <action android:name="android.intent.action.BOOT_COMPLETE" />
-          </intent-filter>
-        </service>
+        <activity android:name="MainActivity"
+                  android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+      <service android:name=".AdminService">
+        <intent-filter>
+          <action android:name="edu.buffalo.cse.pocketadmin.AdminService" />
+          <action android:name="android.intent.action.BOOT_COMPLETE" />
+        </intent-filter>
+      </service>
     </application>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
-</manifest>
+  </manifest>
