@@ -22,6 +22,10 @@ import android.os.RemoteException;
 import android.preference.PreferenceManager;
 import android.util.Log;
 
+import edu.buffalo.cse.pocketadmin.SnifferPacketHandler;
+import edu.buffalo.cse.pocketadmin.MainActivity;
+import edu.buffalo.cse.pocketadmin.R;
+
 public class PcapService extends Service {
 	private final String LOGTAG = "pcapcapture-service";
 
@@ -33,8 +37,8 @@ public class PcapService extends Service {
 	private HashMap<Integer, UsbSource> mDevMapping = new HashMap<Integer, UsbSource>();
 
 	private boolean mShutdown = false;
-	private SharedPreferences mPreferences;
-	PcapLogger mPcapLogger;
+	// private SharedPreferences mPreferences;
+	private SnifferPacketHandler mPacketHandler;
 
 	public static final int MSG_REGISTER_CLIENT = 0;
 	public static final int MSG_UNREGISTER_CLIENT = 1;
@@ -73,11 +77,13 @@ public class PcapService extends Service {
 	
 	private Runnable logStateTask = new Runnable() {
 		public void run() {
+            /*
 			if (mShutdown) return;
 			
 			sendLogStateBundle();
 			
 			mTimeHandler.postDelayed(this, 1000);
+            */
 		}
 	};
 	
@@ -119,7 +125,7 @@ public class PcapService extends Service {
 				if (mLastUsbState != null)
 					sendStateBundle(mLastUsbState);
 				
-				sendLogStateBundle();
+				// sendLogStateBundle();
 				
 				break;
 			case MSG_UNREGISTER_CLIENT:
@@ -140,7 +146,7 @@ public class PcapService extends Service {
 				handleUsbIntent(msg.getData());
 
 			case MSG_RECONFIGURE_PREFS:
-				updatePreferences();
+				// updatePreferences();
 				break;
 
 			case MSG_RADIOSTATE:
@@ -149,6 +155,7 @@ public class PcapService extends Service {
 			case MSG_COMMAND:
 				b = msg.getData();
 				
+                /*
 				if (b.containsKey(BNDL_CMD_LOGFILE_START_BOOL)) {
 					if (b.containsKey(BNDL_CMD_LOGFILE_STRING)) {
 						mPcapLogger.startLogging(b.getString(BNDL_CMD_LOGFILE_STRING));
@@ -158,6 +165,7 @@ public class PcapService extends Service {
 				}
 				
 				sendLogStateBundle();
+                */
 				
 				break;
 
@@ -216,6 +224,7 @@ public class PcapService extends Service {
 		}
 	}
 	
+    /*
 	public void sendLogStateBundle() {
 		Bundle b = new Bundle();
 	
@@ -238,6 +247,7 @@ public class PcapService extends Service {
 			}
 		}
 	}
+    */
 	
 	@Override
 	public int onStartCommand(Intent intent, int flags, int startId) {
@@ -250,10 +260,10 @@ public class PcapService extends Service {
 	        mPermissionIntent = PendingIntent.getBroadcast(mContext, 0, 
 	        		new Intent(ACTION_USB_PERMISSION), 0);
 
-		if (mPcapLogger == null)
-			mPcapLogger = new PcapLogger();
+		if (mPacketHandler == null)
+			mPacketHandler = new SnifferPacketHandler();
 		
-		mPreferences = PreferenceManager.getDefaultSharedPreferences(mContext);
+		// mPreferences = PreferenceManager.getDefaultSharedPreferences(mContext);
 		
 		// Devicehandler is a basic replicator up to the main messaging system to the UI
 		if (mDeviceHandler == null) {
@@ -268,7 +278,7 @@ public class PcapService extends Service {
 			};		
 		}
 		
-		updatePreferences();
+		// updatePreferences();
 		
 		// Toast.makeText(mContext, "Service starting", Toast.LENGTH_SHORT).show();
 		
@@ -289,6 +299,7 @@ public class PcapService extends Service {
 		return START_STICKY;
 	}
 	
+    /*
 	private void updatePreferences() {
 		mChannelHop = mPreferences.getBoolean(MainActivity.PREF_CHANNELHOP, true);
 		String chpref = mPreferences.getString(MainActivity.PREF_CHANNEL, "11");
@@ -303,6 +314,8 @@ public class PcapService extends Service {
 		
 		return;
 	}
+    */
+
 	
 	private Notification makeNotification(String notifytext, String text) {
 		Notification notification= new Notification(R.drawable.ic_statusbar,
@@ -342,7 +355,7 @@ public class PcapService extends Service {
 								if (mDevMapping.containsKey(device.getDeviceId()))
 									break;
 								
-								UsbSource newSource = s.makeSource(device, mUsbManager, mDeviceHandler, mContext, mPcapLogger);
+								UsbSource newSource = s.makeSource(device, mUsbManager, mDeviceHandler, mContext, mPacketHandler);
 								
 								mDevMapping.put(device.getDeviceId(), newSource);
 								

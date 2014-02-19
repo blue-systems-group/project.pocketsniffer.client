@@ -12,6 +12,8 @@ import android.content.ServiceConnection;
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbManager;
 import android.os.Bundle;
+
+import android.os.Handler;
 import android.os.IBinder;
 import android.os.Message;
 import android.os.Messenger;
@@ -28,12 +30,88 @@ public class MainActivity extends Activity {
 	private Messenger mService = null;
 	private Context mContext;
 	private ArrayList<DeferredUsbIntent> mDeferredIntents = new ArrayList<DeferredUsbIntent>();
+	private final Messenger mMessenger = new Messenger(new IncomingServiceHandler());
 
 	public class DeferredUsbIntent {
 		UsbDevice device;
 		String action;
 		boolean extrapermission;
 	};
+
+	class IncomingServiceHandler extends Handler {
+		@Override
+		public void handleMessage(Message msg) {
+			Bundle b;
+			boolean updateUi = false;
+
+            /*
+			switch (msg.what) {
+			case PcapService.MSG_RADIOSTATE:
+				b = msg.getData();
+
+				Log.d(LOGTAG, "Got radio state: " + b);
+
+				if (b == null)
+					break;
+
+				if (b.getBoolean(UsbSource.BNDL_RADIOPRESENT_BOOL, false)) {
+					mUsbPresent = true;
+
+					mUsbType = b.getString(UsbSource.BNDL_RADIOTYPE_STRING, "Unknown");
+					mUsbInfo = b.getString(UsbSource.BNDL_RADIOINFO_STRING, "No info available");
+					mLastChannel = b.getInt(UsbSource.BNDL_RADIOCHANNEL_INT, 0);
+				} else {
+					// Turn off logging
+					if (mUsbPresent) 
+						doUpdateServiceLogs(mLogPath.toString(), false);
+
+					mUsbPresent = false;
+					mUsbType = "";
+					mUsbInfo = "";
+					mLastChannel = 0;
+				}
+
+				updateUi = true;
+
+				break;
+			case PcapService.MSG_LOGSTATE:
+				b = msg.getData();
+
+				if (b == null)
+					break;
+
+				if (b.getBoolean(PcapService.BNDL_STATE_LOGGING_BOOL, false)) {
+					mLocalLogging = true;
+					mLogging = true;
+
+					mLogPath = new File(b.getString(PcapService.BNDL_CMD_LOGFILE_STRING));
+					mLogCount = b.getInt(PcapService.BNDL_STATE_LOGFILE_PACKETS_INT, 0);
+					mLogSize = b.getLong(PcapService.BNDL_STATE_LOGFILE_SIZE_LONG, 0);
+				} else {
+					mLocalLogging = false;
+					mLogging = false;
+
+					if (mShareOnStop) {
+						Intent i = new Intent(Intent.ACTION_SEND); 
+						i.setType("application/cap"); 
+						i.putExtra(Intent.EXTRA_STREAM, Uri.parse("file://" + mOldLogPath)); 
+						startActivity(Intent.createChooser(i, "Share Pcap file"));
+						mShareOnStop = false;
+					}
+				}
+
+				updateUi = true;
+
+				break;
+			default:
+				super.handleMessage(msg);
+			}
+
+			if (updateUi)
+				doUpdateUi();
+                */
+		}
+	}
 
 
 

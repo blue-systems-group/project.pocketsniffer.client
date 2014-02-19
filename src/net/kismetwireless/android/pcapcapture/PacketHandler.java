@@ -9,6 +9,8 @@ abstract public class PacketHandler {
 	protected long handledBytes = 0;
 	protected int handledPackets = 0;
 
+    public static int DLT_IEEE80211 = 105;
+
 	public PacketHandler() {
 		// Nothing?
 	}

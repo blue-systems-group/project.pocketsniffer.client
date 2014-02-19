@@ -1888,7 +1888,7 @@ public class Rtl8187Card extends UsbSource {
 					
 					if (mPacketHandler != null) {
 						Packet p = new Packet(Arrays.copyOfRange(buffer, 0, l));
-						p.setDlt(PcapLogger.DLT_IEEE80211);
+						p.setDlt(PacketHandler.DLT_IEEE80211);
 					
 						/*
 						if (fcs)
