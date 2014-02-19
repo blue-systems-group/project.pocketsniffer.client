@@ -18,6 +18,10 @@
           <action android:name="android.intent.action.BOOT_COMPLETE" />
         </intent-filter>
       </service>
+
+      <service android:name="net.kismetwireless.android.pcapcapture.PcapService">
+      </service>
+
     </application>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />

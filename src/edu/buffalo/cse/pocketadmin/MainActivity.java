@@ -19,6 +19,7 @@ import android.os.Message;
 import android.os.Messenger;
 import android.os.RemoteException;
 import android.util.Log;
+import android.widget.Toast;
 
 import net.kismetwireless.android.pcapcapture.PcapService;
 import net.kismetwireless.android.pcapcapture.UsbSource;
@@ -120,13 +121,18 @@ public class MainActivity extends Activity {
         // TODO Auto-generated method stub
         super.onCreate(savedInstanceState);
 
+        Log.d(TAG, "========== PocketAdmin MainActivity Starting ==========");
+
         setContentView(R.layout.main);
 
         mContext = this;
 
+        Log.d(TAG, "Starting AdminService ...");
         Intent intent = new Intent(MainActivity.this, AdminService.class);
         mContext.startService(intent);
 
+
+        Log.d(TAG, "Starting PcapService ...");
 		Intent pcapIntent = new Intent(MainActivity.this, PcapService.class);
 		mContext.startService(pcapIntent);
 		doBindService();
@@ -179,6 +185,8 @@ public class MainActivity extends Activity {
 		public void onReceive(Context context, Intent intent) {
 			String action = intent.getAction();
 
+            Log.d(TAG, action);
+
 			if (PcapService.ACTION_USB_PERMISSION.equals(action) ||
 					UsbManager.ACTION_USB_DEVICE_DETACHED.equals(action) ||
 					UsbManager.ACTION_USB_DEVICE_ATTACHED.equals(action)) {
@@ -190,10 +198,14 @@ public class MainActivity extends Activity {
 					di.action = action;
 					di.extrapermission = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false);
 
-					if (mService == null)
+					if (mService == null) {
 						mDeferredIntents.add(di);
-					else
+                    }
+					else {
 						doSendDeferredIntent(di);
+                    }
+
+                    Toast.makeText(mContext, action + " " + di.device.toString(), Toast.LENGTH_SHORT);
 				}
 			}
 		}
@@ -204,7 +216,7 @@ public class MainActivity extends Activity {
 
 		Bundle b = new Bundle();
 
-		// Toast.makeText(mContext, "Sending deferred intent", Toast.LENGTH_SHORT).show();
+		Log.d(TAG, "Sending deferred intent " + i.action);
 
 		msg = Message.obtain(null, PcapService.MSG_USBINTENT);
 

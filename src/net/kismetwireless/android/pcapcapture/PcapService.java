@@ -27,7 +27,7 @@ import edu.buffalo.cse.pocketadmin.MainActivity;
 import edu.buffalo.cse.pocketadmin.R;
 
 public class PcapService extends Service {
-	private final String LOGTAG = "pcapcapture-service";
+	private final String TAG = "PocketAdmin-" + this.getClass().getSimpleName();
 
 	private Context mContext;
 
@@ -118,7 +118,7 @@ public class PcapService extends Service {
 				c = msg.replyTo;
 
 				if (!mClientList.contains(c)) {
-					Log.d(LOGTAG, PcapService.this + " Adding client " + c);
+					Log.d(TAG, PcapService.this + " Adding client " + c);
 					PcapService.this.mClientList.add(c);
 				}
 
@@ -131,7 +131,7 @@ public class PcapService extends Service {
 			case MSG_UNREGISTER_CLIENT:
 				c = msg.replyTo;
 
-				Log.d(LOGTAG, "Removing client " + c);
+				Log.d(TAG, "Removing client " + c);
 				if (mClientList.contains(c))
 					mClientList.remove(c);
 
@@ -218,7 +218,7 @@ public class PcapService extends Service {
 		
 				m.send(s);
 			} catch (RemoteException e) {
-				Log.d(LOGTAG, "Lost a client: " + e);
+				Log.d(TAG, "Lost a client: " + e);
 				mClientList.remove(m);
 			}
 		}
@@ -242,7 +242,7 @@ public class PcapService extends Service {
 				
 				m.send(s);
 			} catch (RemoteException e) {
-				Log.d(LOGTAG, "Lost a client: " + e);
+				Log.d(TAG, "Lost a client: " + e);
 				mClientList.remove(m);
 			}
 		}
@@ -252,6 +252,8 @@ public class PcapService extends Service {
 	@Override
 	public int onStartCommand(Intent intent, int flags, int startId) {
 		mContext = this;
+
+        Log.d(TAG, "========= PcapService Starting =========");
 		
 		if (mNM == null)
 			mNM = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
@@ -359,7 +361,7 @@ public class PcapService extends Service {
 								
 								mDevMapping.put(device.getDeviceId(), newSource);
 								
-								// Log.d(LOGTAG, "Source " + s.getClass() + " would handle this");
+								// Log.d(TAG, "Source " + s.getClass() + " would handle this");
 								// Toast.makeText(mContext, "Source " + s.getClass() + " would claim device", Toast.LENGTH_SHORT).show();
 
 								break;
@@ -392,7 +394,7 @@ public class PcapService extends Service {
 					// Scanning will ask for permission so just stop
 					if (s.scanUsbDevice(device)) {
 						mUsbManager.requestPermission(device, mPermissionIntent);
-						// Log.d(LOGTAG, "Source " + s.getClass() + " likes USB device");
+						// Log.d(TAG, "Source " + s.getClass() + " likes USB device");
 						// Toast.makeText(mContext, "Source " + s.getClass() + " likes USB device", Toast.LENGTH_SHORT).show();
 						break;
 					}
