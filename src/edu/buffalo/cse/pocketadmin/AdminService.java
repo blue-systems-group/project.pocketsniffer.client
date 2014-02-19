@@ -36,6 +36,7 @@ public class AdminService extends Service {
 
     private final int PORT = 1688;
     private final int INTERVAL_MS = 60 * 1000;
+    private final int MIN_LEVEL = -85;
 
     private boolean started = false;
 
@@ -66,7 +67,12 @@ public class AdminService extends Service {
                 List<ScanResult> scanResults = wifiManager.getScanResults();
                 for (ScanResult result : scanResults) {
                     if (result.SSID.equals(SSID)) {
-                        found = true;
+                        if (result.level >= MIN_LEVEL) {
+                            found = true;
+                        }
+                        else {
+                            Log.d(TAG, "Found PocketAdmin, yet its signal is weak (" + result.level + ")");
+                        }
                         break;
                     }
                 }
