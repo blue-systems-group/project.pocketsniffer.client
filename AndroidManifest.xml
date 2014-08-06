@@ -1,31 +1,39 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-      package="edu.buffalo.cse.pocketadmin"
-      android:versionCode="1"
-      android:versionName="1.0">
-    <application android:label="@string/app_name" android:icon="@drawable/ic_launcher">
-        <activity android:name="MainActivity"
-                  android:label="@string/app_name">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
+    package="edu.buffalo.cse.pocketsniffer"
+    android:versionCode="1"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:versionName="1.0.0"
+    >
 
-      <service android:name=".AdminService">
-        <intent-filter>
-          <action android:name="edu.buffalo.cse.pocketadmin.AdminService" />
-          <action android:name="android.intent.action.BOOT_COMPLETE" />
-        </intent-filter>
-      </service>
+  <uses-sdk android:minSdkVersion="19" android:targetSdkVersion="19" />
 
-      <service android:name="net.kismetwireless.android.pcapcapture.PcapService">
-      </service>
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+  <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+  <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+  <uses-permission android:name="android.permission.INTERNET" />
+  <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
 
-    </application>
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
-    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
-  </manifest>
+
+  <application android:label="@string/app_name"
+      android:allowBackup='true'
+      android:icon="@drawable/ic_launcher"
+      android:theme="@style/AppTheme"
+      >
+    <activity android:name="MainActivity"
+        android:label="@string/app_name">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity>
+
+    <service android:name=".SnifferService">
+      <intent-filter>
+        <action android:name="edu.buffalo.cse.pocketsniffer.SnifferService" />
+        <action android:name="android.intent.action.BOOT_COMPLETE" />
+      </intent-filter>
+    </service>
+
+  </application>
+</manifest>
