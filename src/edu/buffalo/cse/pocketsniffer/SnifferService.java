@@ -1,4 +1,4 @@
-package edu.buffalo.cse.pocketadmin;
+package edu.buffalo.cse.pocketsniffer;
 
 import java.io.PrintWriter;
 import java.net.InetAddress;
@@ -26,11 +26,11 @@ import android.os.IBinder;
 import android.os.SystemClock;
 import android.util.Log;
 
-public class AdminService extends Service {
-    private final String TAG = "PocketAdmin-" + this.getClass().getSimpleName();
+public class SnifferService extends Service {
+    private final String TAG = Utils.getTag(this.getClass());
 
     // wifi configuration
-    private final String SSID = "PocketAdmin";
+    private final String SSID = "PocketSniffer";
     private final String PASSWORD = "AUDeORc1haIwvHuM6oeJOYhMAFYTffeC";
     private final int PRIORITY = 99999999;
 
@@ -57,7 +57,7 @@ public class AdminService extends Service {
 
 
             WifiInfo wifiInfo = wifiManager.getConnectionInfo();
-            String currentSSID = removeQuotes(wifiInfo.getSSID());
+            String currentSSID = Utils.stripQuotes(wifiInfo.getSSID());
 
             if (!currentSSID.equals(SSID)) {
                 Log.d(TAG, "Currently connected to " + wifiInfo.getSSID());
@@ -71,14 +71,14 @@ public class AdminService extends Service {
                             found = true;
                         }
                         else {
-                            Log.d(TAG, "Found PocketAdmin, yet its signal is weak (" + result.level + ")");
+                            Log.d(TAG, "Found PocketSniffer, yet its signal is weak (" + result.level + ")");
                         }
                         break;
                     }
                 }
 
                 if (found) {
-                    Log.d(TAG, "Found PocketAdmin Wifi, connecting...");
+                    Log.d(TAG, "Found PocketSniffer Wifi, connecting...");
 
                     int networkId = addConfiguration();
                     wifiManager.disconnect();
@@ -86,24 +86,24 @@ public class AdminService extends Service {
                     wifiManager.reconnect();
                 }
                 else {
-                    Log.v(TAG, "No PocketAdmin Wifi found.");
+                    Log.v(TAG, "No PocketSniffer Wifi found.");
                 }
 
                 /* In both cases, we need to wait for next check interval
                  *  1) If we just initiated reconnection, the device need some
                  *  time to connect
-                 *  2) Or we need to wait for PocketAdmin Wifi
+                 *  2) Or we need to wait for PocketSniffer Wifi
                  */
 
                 return;
             }
 
-            /* At this point, we're connected to PocketAdmin Wifi */
+            /* At this point, we're connected to PocketSniffer Wifi */
 
             DhcpInfo dhcpInfo = wifiManager.getDhcpInfo();
-            InetAddress addr = int2Addr(dhcpInfo.gateway);
+            InetAddress addr = Utils.int2Addr(dhcpInfo.gateway);
 
-            Log.d(TAG, "Connected to PocketAdmin Wifi, sending msg to " + addr.toString());
+            Log.d(TAG, "Connected to PocketSniffer Wifi, sending msg to " + addr.toString());
 
             try {
                 Socket socket = new Socket(addr, PORT);
@@ -111,6 +111,7 @@ public class AdminService extends Service {
                 printWriter.write(prepareMessage());
                 printWriter.flush();
                 printWriter.close();
+                socket.close();
             }
             catch (Exception e) {
                 Log.e(TAG, "Faild to send msg to router: " + e.getMessage());
@@ -156,35 +157,8 @@ public class AdminService extends Service {
     }
 
 
-    /* Convert integer to IPv4 address */
-    private InetAddress int2Addr(int addr) {
-        byte[] bytes = { 
-            (byte)(0xff & addr),
-            (byte)(0xff & (addr >> 8)),
-            (byte)(0xff & (addr >> 16)),
-            (byte)(0xff & (addr >> 24)) };
 
-        try {
-            return InetAddress.getByAddress(bytes);
-        }
-        catch (UnknownHostException e) {
-            Log.e(TAG, "Faild to get gateway info: " + e.getMessage());
-            return null;
-        }
-    }
-
-    private String removeQuotes(String s) {
-        if (s.startsWith("\"") && s.endsWith("\"")) {
-            return s.substring(1, s.length()-1);
-        }
-        return s;
-    }
-
-    private String addQuotes(String s) {
-        return "\"" + s + "\"";
-    }
-
-    /* Create wifi configuration for PocketAdmin Wifi if not exists already
+    /* Create wifi configuration for PocketSniffer Wifi if not exists already
      * return its networkId
      */
     private int addConfiguration() {
@@ -192,14 +166,14 @@ public class AdminService extends Service {
         WifiManager wifiManager = (WifiManager) getSystemService(Context.WIFI_SERVICE);
         List<WifiConfiguration> configurationList = wifiManager.getConfiguredNetworks();
         for (WifiConfiguration con : configurationList) {
-            if (removeQuotes(con.SSID).equals(SSID)) {
+            if (Utils.stripQuotes(con.SSID).equals(SSID)) {
                 return con.networkId;
             }
         }
 
         WifiConfiguration config = new WifiConfiguration();
-        config.SSID = addQuotes(SSID);
-        config.preSharedKey = addQuotes(PASSWORD);
+        config.SSID = Utils.addQuotes(SSID);
+        config.preSharedKey = Utils.addQuotes(PASSWORD);
         config.priority = PRIORITY;
 
         return wifiManager.addNetwork(config);
@@ -213,7 +187,7 @@ public class AdminService extends Service {
             return START_STICKY;
         }
 
-        Log.v(TAG, "======== Starting PocketAdmin Service ======== ");
+        Log.v(TAG, "======== Starting PocketSniffer Service ======== ");
 
         super.onStartCommand(intent, flags, startId);
 
@@ -239,18 +213,18 @@ public class AdminService extends Service {
     @Override
     public void onDestroy() {
         super.onDestroy();
-        Log.v(TAG, "======== Destroying PocketAdmin Service ========");
+        Log.v(TAG, "======== Destroying PocketSniffer Service ========");
 
         unregisterReceiver(checkReceiver);
         stopAlarm();
 
-        /* remove the PocketAdmin network configration */
+        /* remove the PocketSniffer network configration */
         /* TODO when uninstalled, onDestroy is not called, need to figure out
          * how to delete this configuration in that case */
         WifiManager wifiManager = (WifiManager) getSystemService(Context.WIFI_SERVICE);
         List<WifiConfiguration> configurationList = wifiManager.getConfiguredNetworks();
         for (WifiConfiguration con : configurationList) {
-            if (removeQuotes(con.SSID).equals(SSID)) {
+            if (Utils.stripQuotes(con.SSID).equals(SSID)) {
                 wifiManager.removeNetwork(con.networkId);
                 wifiManager.disconnect();
                 wifiManager.reconnect();
@@ -263,7 +237,7 @@ public class AdminService extends Service {
     public void onCreate() {
         super.onCreate();
 
-        Log.v(TAG, "======== Creating PocketAdmin Service ========");
+        Log.v(TAG, "======== Creating PocketSniffer Service ========");
 
         checkPendingIntent = PendingIntent.getBroadcast(this, 0, 
                 new Intent(checkIntentName), PendingIntent.FLAG_UPDATE_CURRENT);

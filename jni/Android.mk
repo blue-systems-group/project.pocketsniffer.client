@@ -21,8 +21,7 @@ LOCAL_SRC_FILES:= \
 	libpcap-1.3.0/bpf_filter.c \
 	libpcap-1.3.0/version.c \
 	pcap_jni.c
-#include $(BUILD_EXECUTABLE)
-LOCAL_CFLAGS	:= -DSYS_ANDROID=1 -Dyylval=pcap_lval -DHAVE_CONFIG_H  -D_U_="__attribute__((unused))" -I$(LOCAL_PATH)/libpcap-1.3.0
+LOCAL_CFLAGS	:= -DSYS_ANDROID=1 -Dyylval=pcap_lval -DHAVE_CONFIG_H  -D_U_="__attribute__((unused))" -I$(LOCAL_PATH)/libpcap-1.3.0 -DHAVE_LIMITS_H
 LOCAL_LDLIBS	:= -llog
 include $(BUILD_SHARED_LIBRARY)
 
