@@ -36,6 +36,9 @@ public class SnifTask extends AsyncTask<SnifSpec, SnifProgress, SnifResult> {
         super.onCancelled();
     }
 
+    public void gotPacket(Packet pkt) {
+    }
+
     @Override
     protected SnifResult doInBackground(SnifSpec... params) {
         SnifResult result = new SnifResult();
@@ -108,18 +111,37 @@ class SnifProgress {
 }
 
 class Station {
-    public byte[] mac;
-    public String manufacturer;
-}
-
-class AP extends Station {
+    public String mac;
+    public transient String manufacturer;
     public String SSID;
 
-}
+    @Override
+    public boolean equals(Object object) {
+        if (this == object) {
+            return true;
+        }
+        if (object == null) {
+            return false;
+        }
+        if (!(object instanceof Station)) {
+            return false;
+        }
 
-class Device extends Station {
-    public String hostname;
-    public byte[] ip;
+        Station other = (Station) object;
+
+        if (this.mac == null) {
+            if (other.mac != null) {
+                return false;
+            }
+        }
+        else {
+            if (!this.mac.equals(other.mac)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
 }
 
 class TrafficFlow {
@@ -127,6 +149,59 @@ class TrafficFlow {
     Station to;
     int avgRSSI;
     int packetCount;
+
+    @Override
+    public boolean equals(Object object) {
+        if (this == object) {
+            return true;
+        }
+        if (object == null) {
+            return false;
+        }
+        if (!(object instanceof TrafficFlow)) {
+            return false;
+        }
+
+        TrafficFlow other = (TrafficFlow) object;
+        
+        if (this.from == null) {
+            if (other.from != null) {
+                return false;
+            }
+        }
+        else {
+            if (!this.from.equals(other.from)) {
+                return false;
+            }
+        }
+
+        if (this.to == null) {
+            if (other.to != null) {
+                return false;
+            }
+        }
+        else {
+            if (!this.to.equals(other.to)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+}
+
+class Packet {
+    public int type;
+    public int subtype;
+    public boolean from_ds;
+    public boolean to_ds;
+    public int tv_sec;
+    public int tv_usec;
+    public int len;
+    public String addr1;
+    public String addr2;
+    public int rssi;
+    public int freq;
 }
 
 class SnifResult {
