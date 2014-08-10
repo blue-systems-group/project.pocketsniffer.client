@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-adb shell am startservice --user 0 edu.buffalo.cse.pocketadmin/.AdminService
+adb shell am startservice --user 0 edu.buffalo.cse.pocketsniffer/.SnifferService

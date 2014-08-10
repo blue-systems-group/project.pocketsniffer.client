@@ -2,6 +2,7 @@ package edu.buffalo.cse.pocketsniffer;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -25,6 +26,8 @@ public class SnifTask extends AsyncTask<SnifSpec, SnifProgress, SnifResult> {
     private File mTmpDir;
     private Runtime mRuntime;
 
+    private List<TrafficFlow> mTrafficFlow;
+
     public SnifTask(Context context) {
         mContext = context;
         mTmpDir = mContext.getCacheDir();
@@ -36,42 +39,65 @@ public class SnifTask extends AsyncTask<SnifSpec, SnifProgress, SnifResult> {
         super.onCancelled();
     }
 
-    public void gotPacket(Packet pkt) {
+    private void startParsing() {
+        mTrafficFlow = new ArrayList<TrafficFlow>();
+    }
+
+    private void gotPacket(Packet pkt) {
+        Log.d(TAG, "Packet: " + pkt.addr2 + " -> " + pkt.addr1);
+    }
+
+    private boolean ifaceUp() {
+        String[] cmd = {"su", "-c", "ifconfig " +  MONITOR_IFACE + " up"};
+        Object[] result = Utils.call(cmd, -1);
+        int retCode = (Integer) result[0];
+        String output = (String) result[1];
+        if (((Integer) result[0]) == 0) {
+            Log.d(TAG, "Successfully bring up monitor iface.");
+            return true;
+        }
+        else {
+            Log.e(TAG, "Failed to bring up monitor interface. " + 
+                    "Return code: " + retCode +
+                    "Output: " + output);
+            return false;
+        }
     }
 
     @Override
     protected SnifResult doInBackground(SnifSpec... params) {
         SnifResult result = new SnifResult();
         for (SnifSpec spec : params) {
+            if (!ifaceUp()) {
+                return null;
+            }
             try {
-                if (mRuntime.exec("su -c ifconfig " + MONITOR_IFACE + " up").waitFor() != 0) {
-                    Log.e(TAG, "Failed to bring up monitor interface.");
-                    return null;
-                }
+                File capFile = File.createTempFile("pcap-", ".cap", mTmpDir);
+                String[] cmd;
 
-                File capFile = File.createTempFile("pcap", "cap", mTmpDir);
-                String cmd = "tcpdump -i " + MONITOR_IFACE + " -n -w " + capFile.getAbsolutePath();
                 if (spec.packetCount > 0) {
-                    cmd += " -c " + spec.packetCount;
-                }
-                Process proc = mRuntime.exec(cmd);
-                if (spec.packetCount > 0) {
-                    proc.waitFor();
+                    cmd = new String[]{"/system/bin/sh", "-c", "tcpdump", "-i", MONITOR_IFACE, "-n", "-w", capFile.getAbsolutePath(), "-s", "0", "-c", spec.packetCount+""};
                 }
                 else {
-                    if (spec.durationSec < 0) {
-                        spec.durationSec = DEFAULT_SNIF_TIME_SEC;
-                    }
-                    Thread.sleep(spec.durationSec * 1000);
-                    proc.destroy();
+                    cmd = new String[]{"/system/bin/sh", "-c", "tcpdump", "-i", MONITOR_IFACE, "-n", "-w", capFile.getAbsolutePath(), "-s", "0"};
                 }
-                List<TrafficFlow> flows = parsePcap(capFile.getAbsolutePath());
-                result.channelTraffic.put(spec.channel, flows);
 
-                capFile.delete();
-            }
-            catch (InterruptedException e) {
-                Log.e(TAG, "Command interrupted.", e);
+                Object[] res = Utils.call(cmd, spec.durationSec);
+                Integer exitValue = (Integer) res[0];
+                String output = (String) res[1];
+                if (exitValue != 0) {
+                    Log.e(TAG, "Failed to call tcpdump (" + exitValue + "): " + output);
+                    continue;
+                }
+
+                startParsing();
+                if (parsePcap(capFile.getAbsolutePath())) {
+                    result.channelTraffic.put(spec.channel, mTrafficFlow);
+                    capFile.delete();
+                }
+                else {
+                    Log.e(TAG, "Failed to parse cap file.");
+                }
             }
             catch (IOException e) {
                 Log.e(TAG, "Failed to snif channel " + spec.channel + ".", e);
@@ -87,7 +113,7 @@ public class SnifTask extends AsyncTask<SnifSpec, SnifProgress, SnifResult> {
         super.onProgressUpdate(values);
     }
 
-    private native List<TrafficFlow> parsePcap(String capFile);
+    private native boolean parsePcap(String capFile);
 }
 
 

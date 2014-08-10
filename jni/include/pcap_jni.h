@@ -1,25 +1,11 @@
-#include <jni.h>
-#include <android/log.h>
-#include <pcap.h>
-#include <arpa/inet.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <unistd.h>
-
 #ifndef _PCAP_JNI_H_
 #define _PCAP_JNI_H_
 
+#include <jni.h>
+#include <sys/types.h>
 
-#define LOGV(tag,...) __android_log_print(ANDROID_LOG_VERBOSE, (tag), __VA_ARGS__)
-#define LOGD(tag,...) __android_log_print(ANDROID_LOG_DEBUG  , (tag), __VA_ARGS__)
-#define LOGI(tag,...) __android_log_print(ANDROID_LOG_INFO   , (tag), __VA_ARGS__)
-#define LOGW(tag,...) __android_log_print(ANDROID_LOG_WARN   , (tag), __VA_ARGS__)
-#define LOGE(tag,...) __android_log_print(ANDROID_LOG_ERROR  , (tag), __VA_ARGS__)
+#include "jni_utils.h"
 
-#define TAG "PocketSniffer-JNI"
-
-#define _P_ __attribute__((__packed__))
-#define STATIC_ASSERT(cond) typedef char static_assertion[(cond)?1:-1]
 
 
 /* custom radiotap header, see drivers/net/wireless/bcmdhd/wl_linux_mon.c */
@@ -49,9 +35,18 @@ typedef struct custom_radiotap_header {
 #define FC_MASK_FROM_DS         (((uint16_t)1)<<9)
 #define FC_MASK_TO_DS           (((uint16_t)1)<<8)
 
-#define FC_GET_SUBTYPE(fc)      (((fc) & 0x00f0) >> 4)
-#define FC_GET_TYPE(fc)         (((fc) & 0x00c0) >> 2)
-#define FC_GET_PROTO_VER(fc)    (((fc) & 0x0003))
+#define FC_ORDER(fc)            (((fc) & FC_MASK_ORDER)? true: false)
+#define FC_PROTECTED(fc)        (((fc) & FC_MASK_PROTECTED)? true: false)
+#define FC_MORE_DATA(fc)        (((fc) & FC_MASK_MORE_DATA)? true: false)
+#define FC_PWR_MNG(fc)          (((fc) & FC_MASK_PWR_MNG)? true: false)
+#define FC_RETRY(fc)            (((fc) & FC_MASK_RETRY)? true: false)
+#define FC_MORE_FRAG(fc)        (((fc) & FC_MASK_MORE_FRAG)? true: false)
+#define FC_FROM_DS(fc)          (((fc) & FC_MASK_FROM_DS)? true: false)
+#define FC_TO_DS(fc)            (((fc) & FC_MASK_TO_DS)? true: false)
+
+#define FC_TYPE(fc)             (((fc) & 0x00c0) >> 2)
+#define FC_SUBTYPE(fc)          (((fc) & 0x00f0) >> 4)
+#define FC_PROTO_VER(fc)        (((fc) & 0x0003))
 
 #define MAC_LEN 6
 
@@ -75,5 +70,5 @@ typedef struct dot11_header {
 
 
 
-JNIEXPORT jobjectArray JNICALL Java_edu_buffalo_cse_pocketsniffer_SnifTask_parsePcap(JNIEnv* env, jobject this, jstring file);
+JNIEXPORT jboolean JNICALL Java_edu_buffalo_cse_pocketsniffer_SnifTask_parsePcap(JNIEnv* env, jobject this, jstring file);
 #endif /* _PCAP_JNI_H_ */

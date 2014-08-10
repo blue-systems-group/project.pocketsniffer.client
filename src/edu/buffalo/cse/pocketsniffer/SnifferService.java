@@ -38,7 +38,7 @@ public class SnifferService extends Service {
     private final int INTERVAL_MS = 60 * 1000;
     private final int MIN_LEVEL = -85;
 
-    private boolean started = false;
+    private boolean mStarted = false;
 
     private String checkIntentName = this.getClass().getName() + ".Check";
     private IntentFilter checkIntentFilter = new IntentFilter(checkIntentName);
@@ -119,6 +119,22 @@ public class SnifferService extends Service {
         }
     };
 
+    private String mSnifIntentName = this.getClass().getName() + ".Snif";
+    private IntentFilter mSnifIntentFilter = new IntentFilter(mSnifIntentName);
+    private PendingIntent mSnifPendingIntent;
+    private BroadcastReceiver mSnifReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            Log.d(TAG, "Intent fired, action is " + intent.getAction());
+
+            SnifSpec spec = new SnifSpec();
+            spec.channel = 1;
+            spec.durationSec = 30;
+            (new SnifTask(context)).execute(spec);
+        }
+    };
+
+
 
     /* Package Wifi scan results and device's MAC address in to JSON format */
     private String prepareMessage() {
@@ -182,20 +198,20 @@ public class SnifferService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        if (started) {
+        if (mStarted) {
             Log.v(TAG, "Not restarting started service");
             return START_STICKY;
         }
+        super.onStartCommand(intent, flags, startId); 
 
         Log.v(TAG, "======== Starting PocketSniffer Service ======== ");
 
-        super.onStartCommand(intent, flags, startId);
-
         registerReceiver(checkReceiver, checkIntentFilter);
+        registerReceiver(mSnifReceiver, mSnifIntentFilter);
 
         startPeriodic();
 
-        started = true;
+        mStarted = true;
         return START_STICKY;
     }
 
@@ -241,6 +257,9 @@ public class SnifferService extends Service {
 
         checkPendingIntent = PendingIntent.getBroadcast(this, 0, 
                 new Intent(checkIntentName), PendingIntent.FLAG_UPDATE_CURRENT);
+
+        mSnifPendingIntent = PendingIntent.getBroadcast(this, 0, 
+                new Intent(mSnifIntentName), PendingIntent.FLAG_UPDATE_CURRENT);
     }
 
     @Override
