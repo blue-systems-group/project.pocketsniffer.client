@@ -44,7 +44,7 @@ typedef struct custom_radiotap_header {
 #define FC_FROM_DS(fc)          (((fc) & FC_MASK_FROM_DS)? true: false)
 #define FC_TO_DS(fc)            (((fc) & FC_MASK_TO_DS)? true: false)
 
-#define FC_TYPE(fc)             (((fc) & 0x00c0) >> 2)
+#define FC_TYPE(fc)             (((fc) & 0x000c) >> 2)
 #define FC_SUBTYPE(fc)          (((fc) & 0x00f0) >> 4)
 #define FC_PROTO_VER(fc)        (((fc) & 0x0003))
 

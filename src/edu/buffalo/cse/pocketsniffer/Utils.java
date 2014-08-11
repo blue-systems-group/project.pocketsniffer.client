@@ -1,12 +1,25 @@
 package edu.buffalo.cse.pocketsniffer;
 
 import java.io.BufferedReader;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.lang.reflect.Field;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Date;
+import java.util.List;
+import java.util.Locale;
 
+import org.json.JSONObject;
+
+import android.content.Context;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageManager;
 import android.util.Log;
 
 public class Utils {
@@ -65,17 +78,32 @@ public class Utils {
         return sb.toString();
     }
 
-    /** Call a shell command, get result.
+    public static Object[] call(String[] cmd, int timeoutSec, boolean su) {
+        String cmdOneLine = join(" ", cmd);
+        return call(cmdOneLine, timeoutSec, su);
+    }
+
+    /** Call a shell command using su, get result.
      * ret[0] is sub process's return code, Integer.
      * ret[1] is sub process's output, String.
+     * ret[2] is sub process's err output, String.
      */
-    public static Object[] call(String[] cmd, int timeoutSec) {
+    public static Object[] call(String cmd, int timeoutSec, boolean su) {
+        Log.d(TAG, "Calling " + cmd);
+
         Process proc = null;
         Integer retval = -1;
         String output = null;
-        Log.d(TAG, "Calling " + join(" ", cmd));
+        String err = null;
+
+        String shell = su? "su" : "/system/bin/sh";
+
         try {
-            proc = Runtime.getRuntime().exec(cmd);
+            proc = Runtime.getRuntime().exec(shell);
+            DataOutputStream stdin = new DataOutputStream(proc.getOutputStream());
+            stdin.writeBytes(cmd + "\n");
+            stdin.writeBytes("exit\n");
+            stdin.flush();
             if (timeoutSec > 0) {
                 for (int i = 0; i < timeoutSec; i++) {
                     try {
@@ -91,9 +119,10 @@ public class Utils {
                 retval = proc.waitFor();
             }
             output = readFull(proc.getInputStream());
+            err = readFull(proc.getErrorStream());
         }
         catch (InterruptedException e) {
-            Log.e(TAG, "Cmd " + cmd[0] + " interrupted.", e);
+            Log.e(TAG, "Cmd " + cmd + " interrupted.", e);
         }
         catch (IOException e) {
             Log.e(TAG, "", e);
@@ -103,6 +132,78 @@ public class Utils {
                 proc.destroy();
             }
         }
-        return new Object[]{retval, output};
+        return new Object[]{retval, output, err};
+    }
+
+    public static List<Field> getAllFields(Class<?> c) {
+        List<Field> fields = new ArrayList<Field>();
+
+        while (c != null && c != Object.class) {
+            fields.addAll(Arrays.asList(c.getDeclaredFields()));
+            c = c.getSuperclass();
+        }
+
+        return fields;
+    }
+
+    public static Object safeGet(Field field, Object object) {
+        boolean accessible = field.isAccessible();
+        Object ret = null;
+
+        if (!accessible) {
+            field.setAccessible(true);
+        }
+        try {
+            ret = field.get(object);
+        }
+        catch (Exception e) {
+            Log.e(TAG, "Failed to get " + object.getClass().getName() + "." + field.getName(), e);
+        }
+        if (!accessible) {
+            field.setAccessible(false);
+        }
+        return ret;
+    }
+
+    public static JSONObject dumpFieldsAsJSON(Object object) {
+        JSONObject json = new JSONObject();
+        for (Field field : getAllFields(object.getClass())) {
+            try {
+                json.put(field.getName(), safeGet(field, object));
+            }
+            catch (Exception e) {
+                Log.e(TAG, "Failed to convert to JSON: " + object.getClass().getName() + "." + field.getName(), e);
+            }
+
+        }
+        return json;
+    }
+
+    public static String getDateTimeString(long ms) {
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd-HH:mm:ss.SSSZ", Locale.US);
+        return sdf.format(new Date(ms));
+    }
+
+    public static String getDateTimeString(int sec, int usec) {
+        return getDateTimeString(sec * 1000 + usec / 1000);
+    }
+
+    public static String getDateTimeString() {
+        return getDateTimeString(System.currentTimeMillis());
+    }
+
+    public static int getUid(Context context, String packageName) {
+        PackageManager pm = context.getPackageManager();
+        List<ApplicationInfo> apps = pm.getInstalledApplications(PackageManager.GET_META_DATA);
+        for (ApplicationInfo info : apps) {
+            if (info.packageName.equals(packageName)) {
+                return info.uid;
+            }
+        }
+        return -1;
+    }
+
+    public static int getMyUid(Context context) {
+        return getUid(context, context.getPackageName());
     }
 }

@@ -1,13 +1,16 @@
 package edu.buffalo.cse.pocketsniffer;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import android.content.Context;
+import android.net.wifi.ScanResult;
+import android.net.wifi.WifiManager;
 import android.os.AsyncTask;
 import android.util.Log;
 
@@ -17,21 +20,26 @@ public class SnifTask extends AsyncTask<SnifSpec, SnifProgress, SnifResult> {
         System.loadLibrary("pcap");
     }
 
-    private final String TAG = Utils.getTag(this.getClass());
+    private static final String TAG = Utils.getTag(SnifTask.class);
 
     private final static String MONITOR_IFACE = "mon.wlan0";
     private final static int DEFAULT_SNIF_TIME_SEC = 30;
 
-    private Context mContext;
-    private File mTmpDir;
-    private Runtime mRuntime;
+    private final static int FRAME_TYPE_DATA = 2;
+    private final static int FRAME_SUBTYPE_DATA = 0;
+    private final static int FRAME_SUBTYPE_QOS_DATA = 8;
 
-    private List<TrafficFlow> mTrafficFlow;
+    private Context mContext;
+    private File mDataDir;
+    private WifiManager mWifiManager;
+
+    private Map<String, TrafficFlow> mTrafficFlow;
+    private Map<String, Station> mStations;
 
     public SnifTask(Context context) {
         mContext = context;
-        mTmpDir = mContext.getCacheDir();
-        mRuntime = Runtime.getRuntime();
+        mDataDir = mContext.getDir("pcap", Context.MODE_PRIVATE);
+        mWifiManager = (WifiManager) mContext.getSystemService(Context.WIFI_SERVICE);
     }
 
     @Override
@@ -40,26 +48,62 @@ public class SnifTask extends AsyncTask<SnifSpec, SnifProgress, SnifResult> {
     }
 
     private void startParsing() {
-        mTrafficFlow = new ArrayList<TrafficFlow>();
+        Log.d(TAG, "Start parsing ...");
+        mTrafficFlow = new HashMap<String, TrafficFlow>();
+        mStations = new HashMap<String, Station>();
+        for (ScanResult result : mWifiManager.getScanResults()) {
+            if (!mStations.containsKey(result.BSSID)) {
+                mStations.put(result.BSSID, new Station(result));
+            }
+        }
     }
 
     private void gotPacket(Packet pkt) {
-        Log.d(TAG, "Packet: " + pkt.addr2 + " -> " + pkt.addr1);
+        if (pkt.type != FRAME_TYPE_DATA || !(pkt.type == FRAME_SUBTYPE_DATA || pkt.type == FRAME_SUBTYPE_QOS_DATA)) {
+            Log.d(TAG, "Ignoring " + pkt.toString());
+            return;
+        }
+        if (!mStations.containsKey(pkt.addr1)) {
+            mStations.put(pkt.addr1, new Station(pkt.addr1));
+        }
+        if (!mStations.containsKey(pkt.addr2)) {
+            mStations.put(pkt.addr1, new Station(pkt.addr2));
+        }
+        Station from = mStations.get(pkt.addr2);
+        Station to = mStations.get(pkt.addr1);
+        String key = TrafficFlow.getKey(from, to);
+
+
+        TrafficFlow flow;
+        if (!mTrafficFlow.containsKey(key)) {
+            flow = new TrafficFlow(from, to);
+            flow.startMs = pkt.tv_sec * 1000 + pkt.tv_usec / 1000;
+            mTrafficFlow.put(key, flow);
+        }
+        else {
+            flow = mTrafficFlow.get(key);
+        }
+
+        flow.rssiList.add(pkt.rssi);
+        flow.packetSizeList.add(pkt.len);
+        if (from.SSID != null) {
+            flow.downlink = true;
+        }
+        flow.endMs = pkt.tv_sec * 1000 + pkt.tv_usec / 1000;
+        Log.d(TAG, from.toString() + " ===> " + to.toString() + ": " + flow.totalBytes());
     }
 
-    private boolean ifaceUp() {
-        String[] cmd = {"su", "-c", "ifconfig " +  MONITOR_IFACE + " up"};
-        Object[] result = Utils.call(cmd, -1);
-        int retCode = (Integer) result[0];
-        String output = (String) result[1];
-        if (((Integer) result[0]) == 0) {
-            Log.d(TAG, "Successfully bring up monitor iface.");
+    private boolean ifaceUp(boolean up) {
+        String[] cmd = {"ifconfig", MONITOR_IFACE, up? "up": "down"};
+        Object[] result = Utils.call(cmd, -1, true);
+        int exitCode = (Integer) result[0];
+        if (exitCode == 0) {
+            Log.d(TAG, "Successfully bring " + (up? "up": "down") +  " monitor iface.");
             return true;
         }
         else {
-            Log.e(TAG, "Failed to bring up monitor interface. " + 
-                    "Return code: " + retCode +
-                    "Output: " + output);
+            String err = (String) result[2];
+            Log.e(TAG, "Failed to bring up monitor interface (" + exitCode + "): " + err);
             return false;
         }
     }
@@ -67,44 +111,47 @@ public class SnifTask extends AsyncTask<SnifSpec, SnifProgress, SnifResult> {
     @Override
     protected SnifResult doInBackground(SnifSpec... params) {
         SnifResult result = new SnifResult();
+        List<String> cmdBase = new ArrayList<String>();
+        cmdBase.addAll(Arrays.asList(new String[]{"tcpdump", "-i", MONITOR_IFACE, "-n", "-s", "0"}));
         for (SnifSpec spec : params) {
-            if (!ifaceUp()) {
+            if (!ifaceUp(true)) {
                 return null;
             }
-            try {
-                File capFile = File.createTempFile("pcap-", ".cap", mTmpDir);
-                String[] cmd;
+            List<String> cmd = new ArrayList<String>();
+            cmd.addAll(cmdBase);
 
-                if (spec.packetCount > 0) {
-                    cmd = new String[]{"/system/bin/sh", "-c", "tcpdump", "-i", MONITOR_IFACE, "-n", "-w", capFile.getAbsolutePath(), "-s", "0", "-c", spec.packetCount+""};
-                }
-                else {
-                    cmd = new String[]{"/system/bin/sh", "-c", "tcpdump", "-i", MONITOR_IFACE, "-n", "-w", capFile.getAbsolutePath(), "-s", "0"};
-                }
+            File capFile = new File(mDataDir, "pcap-" + spec.channel + "-" + Utils.getDateTimeString() + ".cap");
+            cmd.add("-w");
+            cmd.add(capFile.getAbsolutePath());
 
-                Object[] res = Utils.call(cmd, spec.durationSec);
-                Integer exitValue = (Integer) res[0];
-                String output = (String) res[1];
-                if (exitValue != 0) {
-                    Log.e(TAG, "Failed to call tcpdump (" + exitValue + "): " + output);
-                    continue;
-                }
-
-                startParsing();
-                if (parsePcap(capFile.getAbsolutePath())) {
-                    result.channelTraffic.put(spec.channel, mTrafficFlow);
-                    capFile.delete();
-                }
-                else {
-                    Log.e(TAG, "Failed to parse cap file.");
-                }
+            if (spec.packetCount > 0) {
+                cmd.add("-c");
+                cmd.add(Integer.toString(spec.packetCount));
             }
-            catch (IOException e) {
-                Log.e(TAG, "Failed to snif channel " + spec.channel + ".", e);
-            }
-                
 
+            Object[] res = Utils.call(cmd.toArray(new String[]{}), spec.durationSec, true);
+            Integer exitValue = (Integer) res[0];
+            String err = (String) res[2];
+            if (exitValue != 0) {
+                Log.e(TAG, "Failed to call tcpdump (" + exitValue + "): " + err);
+                continue;
+            }
+
+            cmd.clear();
+            cmd.add("chown");
+            cmd.add(Integer.toString(Utils.getMyUid(mContext)));
+            cmd.add(capFile.getAbsolutePath());
+            Utils.call(cmd.toArray(new String[]{}), -1, true);
+
+            startParsing();
+            if (parsePcap(capFile.getAbsolutePath())) {
+                result.channelTraffic.put(spec.channel, mTrafficFlow.values());
+            }
+            else {
+                Log.e(TAG, "Failed to parse cap file.");
+            }
         }
+        ifaceUp(false);
         return null;
     }
 
@@ -140,79 +187,63 @@ class Station {
     public String mac;
     public transient String manufacturer;
     public String SSID;
+    public int freq;
+
+    public Station(String mac) {
+        this.mac = mac;
+        manufacturer = OUI.lookup(mac);
+        SSID = null;
+        freq = 0;
+    }
+
+    public Station(ScanResult result) {
+        mac = result.BSSID;
+        manufacturer = OUI.lookup(mac);
+        SSID = result.SSID;
+        freq = result.frequency;
+    }
 
     @Override
-    public boolean equals(Object object) {
-        if (this == object) {
-            return true;
-        }
-        if (object == null) {
-            return false;
-        }
-        if (!(object instanceof Station)) {
-            return false;
-        }
-
-        Station other = (Station) object;
-
-        if (this.mac == null) {
-            if (other.mac != null) {
-                return false;
-            }
-        }
-        else {
-            if (!this.mac.equals(other.mac)) {
-                return false;
-            }
-        }
-
-        return true;
+    public String toString() {
+        return Utils.dumpFieldsAsJSON(this).toString();
     }
 }
 
 class TrafficFlow {
-    Station from;
-    Station to;
-    int avgRSSI;
-    int packetCount;
+    public Station from;
+    public Station to;
+    public List<Integer> rssiList;
+    public List<Integer> packetSizeList;
+    public boolean downlink;
+    public long startMs;
+    public long endMs;
 
-    @Override
-    public boolean equals(Object object) {
-        if (this == object) {
-            return true;
-        }
-        if (object == null) {
-            return false;
-        }
-        if (!(object instanceof TrafficFlow)) {
-            return false;
-        }
+    public TrafficFlow(Station from, Station to) {
+        this.from = from;
+        this.to = to;
+        rssiList = new ArrayList<Integer>();
+        packetSizeList = new ArrayList<Integer>();
+        downlink = false;
+    }
 
-        TrafficFlow other = (TrafficFlow) object;
-        
-        if (this.from == null) {
-            if (other.from != null) {
-                return false;
-            }
+    public int avgRSSI() {
+        Integer sum = 0;
+        for (Integer i : rssiList) {
+            sum += i;
         }
-        else {
-            if (!this.from.equals(other.from)) {
-                return false;
-            }
-        }
+        return (int)(sum.doubleValue() / rssiList.size());
+    }
 
-        if (this.to == null) {
-            if (other.to != null) {
-                return false;
-            }
+    public int totalBytes() {
+        Integer sum = 0;
+        for (Integer i : packetSizeList) {
+            sum += i;
         }
-        else {
-            if (!this.to.equals(other.to)) {
-                return false;
-            }
-        }
+        return sum;
+    }
 
-        return true;
+    public static String getKey(Station from, Station to) {
+        return Utils.join("-", new String[]{from.mac, to.mac});
     }
 }
 
@@ -228,12 +259,17 @@ class Packet {
     public String addr2;
     public int rssi;
     public int freq;
+
+    @Override
+    public String toString() {
+        return Utils.dumpFieldsAsJSON(this).toString();
+    }
 }
 
 class SnifResult {
-    public Map<Integer, List<TrafficFlow>> channelTraffic;
+    public Map<Integer, Iterable<TrafficFlow>> channelTraffic;
 
     public SnifResult () {
-        channelTraffic = new HashMap<Integer, List<TrafficFlow>>();
+        channelTraffic = new HashMap<Integer, Iterable<TrafficFlow>>();
     }
 }

@@ -12,18 +12,21 @@ import android.content.res.Resources;
 import android.util.Log;
 
 public class OUI {
-    private final String TAG = Utils.getTag(this.getClass());
+    private static final String TAG = Utils.getTag(OUI.class);
     private static final int OUI_KEY_LEN = 8;
 
-    private static OUI mInstance;
+    private static Map<String, String> mOuiMap = new HashMap<String, String>();
+    private static boolean mInitialized = false;
 
-    private Map<String, String> mOuiMap;
-    private Context mContext;
+    public static void initOuiMap(Context context) {
+        if (mInitialized) {
+            Log.w(TAG, "Not reinitialize OUI mapping.");
+            return;
+        }
 
-    private void initOuiMap() {
         BufferedReader bufferedReader = null;
         try {
-            bufferedReader = new BufferedReader(new InputStreamReader(mContext.getResources().openRawResource(R.raw.oui)));
+            bufferedReader = new BufferedReader(new InputStreamReader(context.getResources().openRawResource(R.raw.oui)));
         }
         catch (Resources.NotFoundException e) {
             Log.e(TAG, "Can not found OUI data file.", e);
@@ -36,7 +39,7 @@ public class OUI {
                 if (line.startsWith("#")) {
                     continue;
                 }
-                String[] parts = line.split(" ");
+                String[] parts = line.split("\\s");
                 if (parts[0].length() != OUI_KEY_LEN) {
                     continue;
                 }
@@ -48,27 +51,23 @@ public class OUI {
             return;
         }
         Log.d(TAG, "Successfully imported " + mOuiMap.size() + " OUI entries.");
+        mInitialized = true;
     }
 
-    private OUI(Context context) {
-        mOuiMap = new HashMap<String, String>();
-        mContext = context;
-
-        initOuiMap();
+    private OUI() {
     }
 
-    public synchronized static OUI getInstance(Context context) {
-        if (mInstance == null) {
-            mInstance = new OUI(context);
-        }
-        return mInstance;
-    }
 
-    private String getOuiKey(String mac) {
+    private static String getOuiKey(String mac) {
         return mac.substring(0, OUI_KEY_LEN);
     }
 
-    public String lookup(String mac) {
+    public static String lookup(String mac) {
+        if (!mInitialized) {
+            Log.e(TAG, "Look up OUI while not initialized.");
+            return "Unknown";
+        }
+
         String ouiKey = getOuiKey(mac);
         if (!mOuiMap.containsKey(ouiKey)) {
             mOuiMap.put(ouiKey, "Unknown");

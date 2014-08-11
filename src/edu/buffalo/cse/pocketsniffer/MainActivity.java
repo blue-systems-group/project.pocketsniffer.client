@@ -22,6 +22,8 @@ public class MainActivity extends Activity {
 
         mContext = this;
 
+        OUI.initOuiMap(mContext);
+
         Intent intent = new Intent(MainActivity.this, SnifferService.class);
         mContext.startService(intent);
 

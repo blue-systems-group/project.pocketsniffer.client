@@ -30,9 +30,10 @@ static obj_field_t g_packet_fields[] = {
     { .name = "tv_usec",    .type = "I" },
     { .name = "len",        .type = "I" },
     { .name = "addr1",      .type = "Ljava/lang/String;" },
+    { .name = "addr2",      .type = "Ljava/lang/String;" },
     { .name = "rssi",       .type = "I" },
     { .name = "freq",       .type = "I" },
-#define PACKET_FILED_NUM  10
+#define PACKET_FILED_NUM  11
 };
 
 static jclass g_snif_task_class;
@@ -135,16 +136,25 @@ JNIEXPORT jboolean JNICALL Java_edu_buffalo_cse_pocketsniffer_SnifTask_parsePcap
         get_mac_str(dot11_hdr->addr1, mac_buf);
         str_val = (*env)->NewStringUTF(env, mac_buf);
         (*env)->SetObjectField(env, packet, g_packet_fields[7].id, str_val);
+        (*env)->DeleteLocalRef(env, str_val);
+
+        if (FC_TYPE(dot11_hdr->frame_ctrl) != DOT11_TYPE_CTRL) {
+            get_mac_str(dot11_hdr->addr2, mac_buf);
+            str_val = (*env)->NewStringUTF(env, mac_buf);
+            (*env)->SetObjectField(env, packet, g_packet_fields[8].id, str_val);
+            (*env)->DeleteLocalRef(env, str_val);
+        }
 
         int_val = (jint) radiotap_hdr->rssi;
-        (*env)->SetIntField(env, packet, g_packet_fields[8].id, int_val);
+        (*env)->SetIntField(env, packet, g_packet_fields[9].id, int_val);
 
         int_val = (jint) radiotap_hdr->channel_mhz;
-        (*env)->SetIntField(env, packet, g_packet_fields[9].id, int_val);
+        (*env)->SetIntField(env, packet, g_packet_fields[10].id, int_val);
 
         (*env)->CallVoidMethod(env, this, g_got_pkt, packet);
     }
     ret = true;
+    LOGD(TAG, "Finish parsing pcap file %s ...", file_path);
 
 parse_done:
     if (file_path != NULL) {
@@ -160,10 +170,10 @@ static void dump_pkt(void* pkt, size_t len)
     uint8_t buf[1024];
     size_t i, _len;
 
-    _len = len < sizeof(buf)/2? len: sizeof(buf)/2;
+    _len = len < sizeof(buf)/3? len: sizeof(buf)/3;
 
     for (i = 0; i < _len; i++) {
-        sprintf(&(buf[i*2]), "%02x ", ((uint8_t*)pkt)[i]);
+        sprintf(&(buf[i*3]), "%02x ", ((uint8_t*)pkt)[i]);
     }
     LOGD(TAG, "%s", buf);
 }

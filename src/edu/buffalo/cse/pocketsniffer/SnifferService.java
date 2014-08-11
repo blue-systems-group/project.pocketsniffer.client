@@ -39,6 +39,7 @@ public class SnifferService extends Service {
     private final int MIN_LEVEL = -85;
 
     private boolean mStarted = false;
+    private Context mContext;
 
     private String checkIntentName = this.getClass().getName() + ".Check";
     private IntentFilter checkIntentFilter = new IntentFilter(checkIntentName);
@@ -129,7 +130,7 @@ public class SnifferService extends Service {
 
             SnifSpec spec = new SnifSpec();
             spec.channel = 1;
-            spec.durationSec = 30;
+            spec.packetCount = 1000;
             (new SnifTask(context)).execute(spec);
         }
     };
@@ -206,10 +207,10 @@ public class SnifferService extends Service {
 
         Log.v(TAG, "======== Starting PocketSniffer Service ======== ");
 
-        registerReceiver(checkReceiver, checkIntentFilter);
+        // registerReceiver(checkReceiver, checkIntentFilter);
         registerReceiver(mSnifReceiver, mSnifIntentFilter);
 
-        startPeriodic();
+        // startPeriodic();
 
         mStarted = true;
         return START_STICKY;
@@ -254,6 +255,9 @@ public class SnifferService extends Service {
         super.onCreate();
 
         Log.v(TAG, "======== Creating PocketSniffer Service ========");
+
+        mContext = this;
+        OUI.initOuiMap(mContext);
 
         checkPendingIntent = PendingIntent.getBroadcast(this, 0, 
                 new Intent(checkIntentName), PendingIntent.FLAG_UPDATE_CURRENT);
