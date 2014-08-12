@@ -68,7 +68,22 @@ typedef struct dot11_header {
 
 #define DOT11_PKT_LEN(len)  ((len) - sizeof(custom_radiotap_header_t))
 
+/**
+ * 2: frame control
+ * 2: duration
+ * 18: addr1, addr2, addr3
+ * 2: sequence control
+ */
+#define DOT11_BEACON_HDR_LEN    (2+2+18+2)
 
+/**
+ * 8: timestamp
+ * 2: interval
+ * 2: capability
+ */
+#define DOT11_BEACON_FIXED_LEN  (8+2+2)
+
+#define DOT11_TAG_SSID          0
 
 JNIEXPORT jboolean JNICALL Java_edu_buffalo_cse_pocketsniffer_SnifTask_parsePcap(JNIEnv* env, jobject this, jstring file);
 #endif /* _PCAP_JNI_H_ */

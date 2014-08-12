@@ -6,11 +6,15 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.lang.reflect.Field;
+import java.net.Inet4Address;
 import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
@@ -20,6 +24,8 @@ import org.json.JSONObject;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.util.Log;
 
 public class Utils {
@@ -205,5 +211,46 @@ public class Utils {
 
     public static int getMyUid(Context context) {
         return getUid(context, context.getPackageName());
+    }
+
+    public static InetAddress getIpAddress(Context context) {
+        try {
+            for (NetworkInterface iface : Collections.list(NetworkInterface.getNetworkInterfaces())) {
+                if (iface.isLoopback() || !iface.isUp()) {
+                    continue;
+                }
+                for (InetAddress addr : Collections.list(iface.getInetAddresses())) {
+                    if (!addr.isLoopbackAddress() && addr instanceof Inet4Address) {
+                        return addr;
+                    }
+                }
+            }
+        }
+        catch (SocketException e) {
+            Log.e(TAG, "Failed to get IP address.", e);
+        }
+        return null;
+    }
+
+    /** Test if has connectivity.
+     * If type is positive, test if has certain type of connectivity. Otherwise,
+     * test if has any connectivity.
+     */
+    public static boolean hasNetworkConnection(Context context, int type) {
+        ConnectivityManager connectivityManager = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+        NetworkInfo info = connectivityManager.getActiveNetworkInfo();
+        if (info != null && info.isConnected() ) {
+            if (type > 0) {
+                return info.getType() == type;
+            }
+            else {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static boolean hasNetworkConnection(Context context) {
+        return hasNetworkConnection(context, -1);
     }
 }

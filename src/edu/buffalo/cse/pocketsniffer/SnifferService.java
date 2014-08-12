@@ -3,7 +3,6 @@ package edu.buffalo.cse.pocketsniffer;
 import java.io.PrintWriter;
 import java.net.InetAddress;
 import java.net.Socket;
-import java.net.UnknownHostException;
 import java.util.List;
 
 import org.json.JSONArray;
@@ -128,10 +127,9 @@ public class SnifferService extends Service {
         public void onReceive(Context context, Intent intent) {
             Log.d(TAG, "Intent fired, action is " + intent.getAction());
 
-            SnifSpec spec = new SnifSpec();
-            spec.channel = 1;
-            spec.packetCount = 1000;
-            (new SnifTask(context)).execute(spec);
+            SnifSpec spec = new SnifSpec(new int[]{1, 6, 11});
+            spec.packetCount = 500;
+            (new SnifTask(context, null)).execute(spec);
         }
     };
 

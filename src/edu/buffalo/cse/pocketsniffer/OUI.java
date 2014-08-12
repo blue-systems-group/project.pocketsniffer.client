@@ -15,7 +15,7 @@ public class OUI {
     private static final String TAG = Utils.getTag(OUI.class);
     private static final int OUI_KEY_LEN = 8;
 
-    private static Map<String, String> mOuiMap = new HashMap<String, String>();
+    private static Map<String, String[]> mOuiMap = new HashMap<String, String[]>();
     private static boolean mInitialized = false;
 
     public static void initOuiMap(Context context) {
@@ -43,7 +43,14 @@ public class OUI {
                 if (parts[0].length() != OUI_KEY_LEN) {
                     continue;
                 }
-                mOuiMap.put(parts[0], parts[1]);
+                String ouiKey = parts[0];
+                String shortName = parts[1];
+                parts = line.split("#");
+                String longName = shortName;
+                if (parts.length >= 2) {
+                    longName = parts[1];
+                }
+                mOuiMap.put(ouiKey, new String[]{shortName, longName});
             }
         }
         catch (IOException e) {
@@ -59,19 +66,19 @@ public class OUI {
 
 
     private static String getOuiKey(String mac) {
-        return mac.substring(0, OUI_KEY_LEN);
+        return mac.toUpperCase().substring(0, OUI_KEY_LEN);
     }
 
-    public static String lookup(String mac) {
+    public static String[] lookup(String mac) {
         if (!mInitialized) {
             Log.e(TAG, "Look up OUI while not initialized.");
-            return "Unknown";
+            return null;
         }
-
         String ouiKey = getOuiKey(mac);
         if (!mOuiMap.containsKey(ouiKey)) {
-            mOuiMap.put(ouiKey, "Unknown");
+            Log.w(TAG, "Unknown OUI " + ouiKey);
+            mOuiMap.put(ouiKey, new String[]{"Unknown", "Unknown"});
         }
-        return mOuiMap.get(getOuiKey(mac));
+        return mOuiMap.get(ouiKey);
     }
 }
