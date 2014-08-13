@@ -6,19 +6,25 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.SocketException;
 
+import java.util.Arrays;
+
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import android.content.Context;
 import android.net.ConnectivityManager;
+import android.net.wifi.WifiManager;
 import android.util.Log;
 
 public class ServerTask extends Task<ServerParams, ServerProgress, ServerResult> {
 
     private static final int BUFFER_SIZE = 1024*1024;
 
+    private WifiManager mWifiManager;
+
     public ServerTask(Context context, AsyncTaskListener<ServerParams, ServerProgress, ServerResult> listener) {
         super(context, listener);
+        mWifiManager = (WifiManager) mContext.getSystemService(Context.WIFI_SERVICE);
     }
 
     @Override
@@ -35,7 +41,7 @@ public class ServerTask extends Task<ServerParams, ServerProgress, ServerResult>
         InetAddress addr = Utils.getIpAddress(mContext);
         if (addr == null) {
             result.reason = "Failed to get IP address.";
-            Log.w(TAG, result.reason);
+            Log.e(TAG, result.reason);
             return result;
         }
 
@@ -43,7 +49,6 @@ public class ServerTask extends Task<ServerParams, ServerProgress, ServerResult>
         DatagramSocket serverSock = null;
         try {
             serverSock = new DatagramSocket(param.port, addr);
-            serverSock.setBroadcast(true);
             serverSock.setReuseAddress(true);
             serverSock.setReceiveBufferSize(BUFFER_SIZE);
             serverSock.setSendBufferSize(BUFFER_SIZE);
@@ -55,6 +60,8 @@ public class ServerTask extends Task<ServerParams, ServerProgress, ServerResult>
             return result;
         }
 
+        Log.d(TAG, "Successfully created server UDP socket on port " + param.port);
+
         byte[] buffer = new byte[BUFFER_SIZE];
         DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
         while (!isCancelled()) {
@@ -63,14 +70,24 @@ public class ServerTask extends Task<ServerParams, ServerProgress, ServerResult>
             }
             catch (IOException e) {
                 Log.e(TAG, "Failed to receive packet.", e);
+                continue;
             }
 
-            handle(new String(buffer, 0, packet.getLength()));
+            Log.d(TAG, "Receive message:\n" + Utils.dumpHex(buffer, 0, packet.getLength()));
+
+            ServerProgress progress = new ServerProgress();
+            progress.sender = packet.getAddress();
+            progress.message = Utils.decompress(buffer, 0, packet.getLength());
+            progress.success = handle(progress.message);
+
+            publishProgress(progress);
         }
         return null;
     }
 
-    private void handle(String msg) {
+    private boolean handle(String msg) {
+        Log.d(TAG, "Got message " + msg);
+
         JSONObject json = null;
         
         try {
@@ -79,6 +96,8 @@ public class ServerTask extends Task<ServerParams, ServerProgress, ServerResult>
         catch (JSONException e) {
             Log.e(TAG, "Failed to parse message: " + msg, e);
         }
+
+        return false;
     }
 }
 
@@ -87,6 +106,9 @@ class ServerParams {
 }
 
 class ServerProgress {
+    InetAddress sender;
+    String message;
+    boolean success;
 }
 
 class ServerResult {
