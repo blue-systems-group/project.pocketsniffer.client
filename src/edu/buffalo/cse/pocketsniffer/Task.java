@@ -37,6 +37,7 @@ public abstract class Task<Params, Progress, Result> extends AsyncTask<Params, P
 
     @Override
     protected void onPreExecute() {
+        Log.d(TAG, "Pre execting " + this.getClass().getSimpleName());
         if (mListener != null) {
             mListener.onPreExecute();
         }
@@ -53,9 +54,9 @@ public abstract class Task<Params, Progress, Result> extends AsyncTask<Params, P
 
     @Override
     protected void onPostExecute(Result result) {
+        Log.d(TAG, "Post execting " + this.getClass().getSimpleName());
         if (mListener != null) {
             mListener.onPostExecute(result);
         }
     }
-
 }

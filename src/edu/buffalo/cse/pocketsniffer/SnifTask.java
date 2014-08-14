@@ -156,6 +156,8 @@ public class SnifTask extends Task<SnifParams, SnifProgress, SnifResult> {
 
     @Override
     protected SnifResult doInBackground(SnifParams... params) {
+        Log.d(TAG, "do in background.");
+
         SnifResult result = new SnifResult();
 
         List<String> cmdBase = new ArrayList<String>();

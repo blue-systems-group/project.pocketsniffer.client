@@ -1,13 +1,5 @@
 package edu.buffalo.cse.pocketsniffer;
 
-import java.util.List;
-
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-
-import android.app.AlarmManager;
-import android.app.PendingIntent;
 import android.app.Service;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -18,8 +10,8 @@ import android.net.wifi.ScanResult;
 import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
+import android.os.AsyncTask;
 import android.os.IBinder;
-import android.os.SystemClock;
 import android.util.Log;
 
 public class SnifferService extends Service {
@@ -92,7 +84,7 @@ public class SnifferService extends Service {
 
             SnifParams params = new SnifParams(new int[]{1, 6, 11});
             params.packetCount = 500;
-            (new SnifTask(context, null)).execute(params);
+            (new SnifTask(mContext, null)).executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, params);
         }
     };
 
@@ -131,7 +123,7 @@ public class SnifferService extends Service {
 
         ServerParams params = new ServerParams();
         params.port = LISTEN_PORT;
-        mServerTask.execute(params);
+        mServerTask.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, params);
 
         mStarted = true;
         return START_STICKY;
