@@ -20,7 +20,7 @@ public class OUI {
 
     public static void initOuiMap(Context context) {
         if (mInitialized) {
-            Log.w(TAG, "Not reinitialize OUI mapping.");
+            Log.w(TAG, "Not reinitializing OUI mapping.");
             return;
         }
 
@@ -28,7 +28,7 @@ public class OUI {
         try {
             bufferedReader = new BufferedReader(new InputStreamReader(context.getResources().openRawResource(R.raw.oui)));
         }
-        catch (Resources.NotFoundException e) {
+        catch (Exception e) {
             Log.e(TAG, "Can not found OUI data file.", e);
             return;
         }
@@ -53,12 +53,23 @@ public class OUI {
                 mOuiMap.put(ouiKey, new String[]{shortName, longName});
             }
         }
-        catch (IOException e) {
+        catch (Exception e) {
             Log.e(TAG, "Failed to read OUI file.", e);
             return;
         }
+        finally {
+            if (bufferedReader != null) {
+                try {
+                    bufferedReader.close();
+                }
+                catch (Exception e) {
+                }
+            }
+        }
+
         Log.d(TAG, "Successfully imported " + mOuiMap.size() + " OUI entries.");
         mInitialized = true;
+
     }
 
     private OUI() {

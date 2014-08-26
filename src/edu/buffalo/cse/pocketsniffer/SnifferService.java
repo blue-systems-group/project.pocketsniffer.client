@@ -97,7 +97,8 @@ public class SnifferService extends Service {
     private int addConfiguration() {
         for (WifiConfiguration config : mWifiManager.getConfiguredNetworks()) {
             if (POCKETSNIFFER_SSID.equals(Utils.stripQuotes(config.SSID))) {
-                return config.networkId;
+                mWifiManager.removeNetwork(config.networkId);
+                break;
             }
         }
 
