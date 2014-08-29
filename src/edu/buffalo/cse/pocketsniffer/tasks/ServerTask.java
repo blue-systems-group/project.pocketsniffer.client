@@ -1,35 +1,28 @@
-package edu.buffalo.cse.pocketsniffer;
+package edu.buffalo.cse.pocketsniffer.tasks;
 
-import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
-import java.net.SocketException;
 
-import java.util.Arrays;
-
-import org.json.JSONException;
 import org.json.JSONObject;
 
 import android.content.Context;
 import android.net.ConnectivityManager;
-import android.net.wifi.WifiManager;
 import android.util.Log;
 
-public class ServerTask extends Task<ServerParams, ServerProgress, ServerResult> {
+import edu.buffalo.cse.pocketsniffer.utils.Utils;
+
+public class ServerTask extends Task<ServerTask.Params, ServerTask.Progress, ServerTask.Result> {
 
     private static final int BUFFER_SIZE = 1024*1024;
 
-    private WifiManager mWifiManager;
-
-    public ServerTask(Context context, AsyncTaskListener<ServerParams, ServerProgress, ServerResult> listener) {
+    public ServerTask(Context context, AsyncTaskListener<ServerTask.Params, ServerTask.Progress, ServerTask.Result> listener) {
         super(context, listener);
-        mWifiManager = (WifiManager) mContext.getSystemService(Context.WIFI_SERVICE);
     }
 
     @Override
-    protected ServerResult doInBackground(ServerParams... params) {
-        ServerResult result = new ServerResult();
+    protected ServerTask.Result doInBackground(ServerTask.Params... params) {
+        ServerTask.Result result = new ServerTask.Result();
         result.success = false;
 
         if (!Utils.hasNetworkConnection(mContext, ConnectivityManager.TYPE_WIFI)) {
@@ -38,14 +31,17 @@ public class ServerTask extends Task<ServerParams, ServerProgress, ServerResult>
             return result;
         }
 
-        InetAddress addr = Utils.getIpAddress(mContext);
-        if (addr == null) {
+        InetAddress addr;
+        try {
+            addr = Utils.getIpAddress(mContext);
+        }
+        catch (Exception e) {
             result.reason = "Failed to get IP address.";
-            Log.e(TAG, result.reason);
+            Log.e(TAG, result.reason, e);
             return result;
         }
 
-        ServerParams param = params[0];
+        ServerTask.Params param = params[0];
         DatagramSocket serverSock = null;
         try {
             serverSock = new DatagramSocket(param.port, addr);
@@ -54,7 +50,7 @@ public class ServerTask extends Task<ServerParams, ServerProgress, ServerResult>
             serverSock.setSendBufferSize(BUFFER_SIZE);
             serverSock.setSoTimeout(0);
         }
-        catch (SocketException e) {
+        catch (Exception e) {
             result.reason = "Failed to create server socket.";
             Log.e(TAG, result.reason, e);
             return result;
@@ -64,20 +60,26 @@ public class ServerTask extends Task<ServerParams, ServerProgress, ServerResult>
 
         byte[] buffer = new byte[BUFFER_SIZE];
         DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
-        while (!isCancelled()) {
+        while (!isCancelled() && Utils.hasNetworkConnection(mContext, ConnectivityManager.TYPE_WIFI)) {
             try {
                 serverSock.receive(packet);
             }
-            catch (IOException e) {
+            catch (Exception e) {
                 Log.e(TAG, "Failed to receive packet.", e);
                 continue;
             }
 
             Log.d(TAG, "Receive message:\n" + Utils.dumpHex(buffer, 0, packet.getLength()));
 
-            ServerProgress progress = new ServerProgress();
+            ServerTask.Progress progress = new ServerTask.Progress();
             progress.sender = packet.getAddress();
-            progress.message = Utils.decompress(buffer, 0, packet.getLength());
+            try {
+                progress.message = Utils.decompress(buffer, 0, packet.getLength());
+            }
+            catch (Exception e) {
+                Log.e(TAG, "Failed to decompress message.", e);
+                continue;
+            }
             progress.success = handle(progress.message);
 
             publishProgress(progress);
@@ -93,25 +95,26 @@ public class ServerTask extends Task<ServerParams, ServerProgress, ServerResult>
         try {
             json = new JSONObject(msg);
         }
-        catch (JSONException e) {
+        catch (Exception e) {
             Log.e(TAG, "Failed to parse message: " + msg, e);
         }
-
         return false;
+    }
+
+    public static class Params {
+        public int port;
+    }
+
+    public static class Progress {
+        public InetAddress sender;
+        public String message;
+        public boolean success;
+    }
+
+    public static class Result {
+        public boolean success;
+        public String reason;
     }
 }
 
-class ServerParams {
-    int port;
-}
 
-class ServerProgress {
-    InetAddress sender;
-    String message;
-    boolean success;
-}
-
-class ServerResult {
-    boolean success;
-    String reason;
-}

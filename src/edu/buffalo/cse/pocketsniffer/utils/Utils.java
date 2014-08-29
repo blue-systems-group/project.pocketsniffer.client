@@ -1,4 +1,4 @@
-package edu.buffalo.cse.pocketsniffer;
+package edu.buffalo.cse.pocketsniffer.utils;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
@@ -21,23 +21,25 @@ import java.util.Date;
 import java.util.Formatter;
 import java.util.List;
 import java.util.Locale;
-
 import java.util.zip.Deflater;
 import java.util.zip.DeflaterOutputStream;
 import java.util.zip.InflaterInputStream;
 
+import org.json.JSONException;
 import org.json.JSONObject;
 
 import android.app.AlarmManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.net.ConnectivityManager;
 import android.net.DhcpInfo;
 import android.net.NetworkInfo;
 import android.net.wifi.WifiManager;
 import android.os.SystemClock;
+import android.text.TextUtils;
 import android.util.Log;
 
 public class Utils {
@@ -50,28 +52,22 @@ public class Utils {
     }
 
     /** Convert integer to IPv4 address. */
-    public static InetAddress int2Addr(int addr) {
+    public static InetAddress int2Addr (int addr) throws UnknownHostException { 
         byte[] bytes = { 
             (byte)(0xff & addr),
             (byte)(0xff & (addr >> 8)),
             (byte)(0xff & (addr >> 16)),
-            (byte)(0xff & (addr >> 24)) };
-
-        try {
-            return InetAddress.getByAddress(bytes);
-        }
-        catch (UnknownHostException e) {
-            Log.e(TAG, "Faild to get inetaddress from " + addr + ".", e);
-            return null;
-        }
+            (byte)(0xff & (addr >> 24)),
+        };
+        return InetAddress.getByAddress(bytes);
     }
 
-    /** Strip leading and trailing quotes. */
+    /** Strip (as many as) leading and trailing quotes. */
     public static String stripQuotes(String s) {
         return s.replaceAll("^\"|\"$", "");
     }
 
-    /** Add quotes around string. */
+    /** Add a pair of double quotes around string. */
     public static String addQuotes(String s) {
         return "\"" + s + "\"";
     }
@@ -87,17 +83,6 @@ public class Utils {
         return sb.toString();
     }
 
-    /** Join strings together using sep */
-    public static String join(String sep, String[] str) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < str.length-1; i++) {
-            sb.append(str[i] + sep);
-        }
-        sb.append(str[str.length-1]);
-        return sb.toString();
-    }
-
-
     /** 
      * Call a shell command using su, get result.
      *
@@ -112,9 +97,7 @@ public class Utils {
      *  - ret[1] is sub process's output, String.
      *  - ret[2] is sub process's err output, String.
      */
-    public static Object[] call(String cmd, int timeoutSec, boolean su) {
-        Log.d(TAG, "Calling " + cmd);
-
+    public static Object[] call(String cmd, int timeoutSec, boolean su) throws InterruptedException, IOException {
         Process proc = null;
         Integer retval = -1;
         String output = null;
@@ -144,28 +127,31 @@ public class Utils {
             }
             output = readFull(proc.getInputStream());
             err = readFull(proc.getErrorStream());
+            return new Object[]{retval, output, err};
         }
         catch (InterruptedException e) {
-            Log.e(TAG, "Cmd " + cmd + " interrupted.", e);
+            throw e;
         }
         catch (IOException e) {
-            Log.e(TAG, "", e);
+            throw e;
         }
         finally {
             if (proc != null) {
                 proc.destroy();
             }
         }
-        return new Object[]{retval, output, err};
     }
 
     /** Wrapper of call function using array of progs. */
-    public static Object[] call(String[] cmd, int timeoutSec, boolean su) {
-        String cmdOneLine = join(" ", cmd);
+    public static Object[] call(String[] cmd, int timeoutSec, boolean su) throws InterruptedException, IOException {
+        String cmdOneLine = TextUtils.join(" ", cmd);
         return call(cmdOneLine, timeoutSec, su);
     }
 
-    /** Get all declared field of a class. */
+    /** 
+     * Get all declared field of a class (and it's super class, except for
+     * Object).
+     * */
     public static List<Field> getAllFields(Class<?> c) {
         List<Field> fields = new ArrayList<Field>();
 
@@ -180,21 +166,16 @@ public class Utils {
     /** 
      * Get a certain field of an object.
      *
-     * Exceptions and private fields are handled properly.
+     * Private fields are handled properly.
      */
-    public static Object safeGet(Field field, Object object) {
+    public static Object getField(Field field, Object object) throws Exception {
         boolean accessible = field.isAccessible();
         Object ret = null;
 
         if (!accessible) {
             field.setAccessible(true);
         }
-        try {
-            ret = field.get(object);
-        }
-        catch (Exception e) {
-            Log.e(TAG, "Failed to get " + object.getClass().getName() + "." + field.getName(), e);
-        }
+        ret = field.get(object);
         if (!accessible) {
             field.setAccessible(false);
         }
@@ -206,16 +187,10 @@ public class Utils {
      *
      * Similar to {@code obj.__dict__} in python.
      */
-    public static JSONObject dumpFieldsAsJSON(Object object) {
+    public static JSONObject dumpFieldsAsJSON(Object object) throws JSONException, Exception {
         JSONObject json = new JSONObject();
         for (Field field : getAllFields(object.getClass())) {
-            try {
-                json.put(field.getName(), safeGet(field, object));
-            }
-            catch (Exception e) {
-                Log.e(TAG, "Failed to convert to JSON: " + object.getClass().getName() + "." + field.getName(), e);
-            }
-
+            json.put(field.getName(), getField(field, object));
         }
         return json;
     }
@@ -225,10 +200,10 @@ public class Utils {
      *
      * @param ms Milliseconds from Unix epoch (1/1/1970).
      *
-     * @return Data time string without space, suitable for using in file name.
+     * @return ISO8601 date time string.
      */
     public static String getDateTimeString(long ms) {
-        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd-HH:mm:ss.SSSZ", Locale.US);
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ", Locale.US);
         return sdf.format(new Date(ms));
     }
 
@@ -242,8 +217,10 @@ public class Utils {
         return getDateTimeString(System.currentTimeMillis());
     }
 
-    /** Get a certain package's Linux UID. */
-    public static int getUid(Context context, String packageName) {
+    /**
+     * Get a certain package's Linux UID.
+     */
+    public static int getUid(Context context, String packageName) throws PackageManager.NameNotFoundException {
         PackageManager pm = context.getPackageManager();
         List<ApplicationInfo> apps = pm.getInstalledApplications(PackageManager.GET_META_DATA);
         for (ApplicationInfo info : apps) {
@@ -251,30 +228,25 @@ public class Utils {
                 return info.uid;
             }
         }
-        return -1;
+        throw new PackageManager.NameNotFoundException(packageName);
     }
 
     /** Get my package's UID. */
-    public static int getMyUid(Context context) {
+    public static int getMyUid(Context context) throws PackageManager.NameNotFoundException {
         return getUid(context, context.getPackageName());
     }
 
     /** Get my IP address. */
-    public static InetAddress getIpAddress(Context context) {
-        try {
-            for (NetworkInterface iface : Collections.list(NetworkInterface.getNetworkInterfaces())) {
-                if (iface.isLoopback() || !iface.isUp()) {
-                    continue;
-                }
-                for (InetAddress addr : Collections.list(iface.getInetAddresses())) {
-                    if (!addr.isLoopbackAddress() && addr instanceof Inet4Address) {
-                        return addr;
-                    }
+    public static InetAddress getIpAddress(Context context) throws SocketException {
+        for (NetworkInterface iface : Collections.list(NetworkInterface.getNetworkInterfaces())) {
+            if (iface.isLoopback() || !iface.isUp()) {
+                continue;
+            }
+            for (InetAddress addr : Collections.list(iface.getInetAddresses())) {
+                if (!addr.isLoopbackAddress() && addr instanceof Inet4Address) {
+                    return addr;
                 }
             }
-        }
-        catch (SocketException e) {
-            Log.e(TAG, "Failed to get IP address.", e);
         }
         return null;
     }
@@ -298,11 +270,17 @@ public class Utils {
         return false;
     }
 
+    /**
+     * Test to see if has any kind of network connection available.
+     */
     public static boolean hasNetworkConnection(Context context) {
         return hasNetworkConnection(context, -1);
     }
 
-    public static InetAddress getBroadcastAddress(Context context) {
+    /**
+     * Get broadcast address within group.
+     */
+    public static InetAddress getBroadcastAddress(Context context) throws UnknownHostException {
         if (!hasNetworkConnection(context, ConnectivityManager.TYPE_WIFI)) {
             return null;
         }
@@ -316,6 +294,9 @@ public class Utils {
     }
 
 
+    /**
+     * Start periodically trigering an pending intent.
+     */
     public static void startPeriodic(Context context, PendingIntent intent, long intervalMs) {
         AlarmManager alarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
         alarmManager.setInexactRepeating(AlarmManager.ELAPSED_REALTIME_WAKEUP, SystemClock.elapsedRealtime() + intervalMs, intervalMs, intent);
@@ -326,29 +307,17 @@ public class Utils {
         alarmManager.cancel(intent);
     }
 
-    public static byte[] compress(String raw) {
+    public static byte[] compress(String raw) throws IOException {
         ByteArrayOutputStream bos = new ByteArrayOutputStream();
-        try {
-            DeflaterOutputStream dos = new DeflaterOutputStream(bos, new Deflater(Deflater.BEST_COMPRESSION));
-            dos.write(raw.getBytes("UTF-8"));
-            dos.close();
-        }
-        catch (IOException e) {
-            Log.e(TAG, "Failed to compress string: " + raw, e);
-            return null;
-        }
+        DeflaterOutputStream dos = new DeflaterOutputStream(bos, new Deflater(Deflater.BEST_COMPRESSION));
+        dos.write(raw.getBytes("UTF-8"));
+        dos.close();
         return bos.toByteArray();
     }
 
-    public static String decompress(byte[] raw, int offset, int length) {
-        try {
-            InflaterInputStream iis = new InflaterInputStream(new ByteArrayInputStream(raw, offset, length));
-            return readFull(iis);
-        }
-        catch (IOException e) {
-            Log.e(TAG, "Failed to decompress: " + raw.toString(), e);
-            return null;
-        }
+    public static String decompress(byte[] raw, int offset, int length) throws IOException {
+        InflaterInputStream iis = new InflaterInputStream(new ByteArrayInputStream(raw, offset, length));
+        return readFull(iis);
     }
 
     public static String dumpHex(byte[] array, int offset, int length) {
@@ -367,5 +336,56 @@ public class Utils {
         String hex = formatter.toString();
         formatter.close();
         return hex;
+    }
+
+    public static final String CONDUCTOR_PACKAGE_NAME = "edu.buffalo.cse.phonelab.conductor";
+    public static boolean isPhoneLabDevice(Context context) {
+        PackageManager pm = context.getPackageManager();
+        for (PackageInfo info : pm.getInstalledPackages(0)) {
+            if (CONDUCTOR_PACKAGE_NAME.equals(info.packageName)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** 
+     * Bring iface up or down.
+     *
+     * @return {@code true} if operation succeed. {@code false} otherwise.
+     */
+    public static boolean ifaceUp(String iface, boolean up) throws Exception {
+        String[] cmd = {"ifconfig", iface, up? "up": "down"};
+        Object[] result = Utils.call(cmd, -1, true);
+
+        int exitCode = (Integer) result[0];
+        if (exitCode == 0) {
+            Log.d(TAG, "Successfully bring " + (up? "up": "down") +  " monitor iface.");
+            return true;
+        }
+        else {
+            String err = (String) result[2];
+            Log.e(TAG, "Failed to bring up monitor interface (" + exitCode + "): " + err);
+            return false;
+        }
+    }
+
+    /**
+     * Set dev's channel.
+     *
+     * @return {@code true} if operation succeed. {@code false} otherwise.
+     */
+    public static boolean setChannel(String dev, int chan) throws Exception {
+        String[] cmd = new String[]{"iw", dev, "set", "channel", Integer.toString(chan)};
+        Object[] result = Utils.call(cmd, -1, true);
+        Integer exitCode = (Integer) result[0];
+        if (exitCode == 0) {
+            return true;
+        }
+        else {
+            String err = (String) result[2];
+            Log.e(TAG, "Failed to set channel (" + exitCode + "): " + err);
+            return false;
+        }
     }
 }

@@ -1,4 +1,4 @@
-package edu.buffalo.cse.pocketsniffer;
+package edu.buffalo.cse.pocketsniffer.tasks;
 
 interface AsyncTaskListener<Params, Progress, Result> {
     void onPreExecute();

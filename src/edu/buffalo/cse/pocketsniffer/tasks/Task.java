@@ -1,8 +1,10 @@
-package edu.buffalo.cse.pocketsniffer;
+package edu.buffalo.cse.pocketsniffer.tasks;
 
 import android.content.Context;
 import android.os.AsyncTask;
 import android.util.Log;
+
+import edu.buffalo.cse.pocketsniffer.utils.Utils;
 
 public abstract class Task<Params, Progress, Result> extends AsyncTask<Params, Progress, Result> {
 

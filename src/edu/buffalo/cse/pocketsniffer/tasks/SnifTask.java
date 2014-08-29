@@ -1,4 +1,4 @@
-package edu.buffalo.cse.pocketsniffer;
+package edu.buffalo.cse.pocketsniffer.tasks;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -10,16 +10,20 @@ import java.util.Map;
 import android.content.Context;
 import android.net.wifi.ScanResult;
 import android.net.wifi.WifiManager;
-import android.os.AsyncTask;
+import android.text.TextUtils;
 import android.util.Log;
 
-public class SnifTask extends Task<SnifParams, SnifProgress, SnifResult> {
+import edu.buffalo.cse.pocketsniffer.utils.OUI;
+import edu.buffalo.cse.pocketsniffer.utils.Utils;
+
+public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.Result> {
 
     static {
         System.loadLibrary("pcap");
     }
 
     private final static String MONITOR_IFACE = "mon.wlan0";
+    private final static String WL_DEV_NAME = "phy0";
     private final static int DEFAULT_SNIF_TIME_SEC = 30;
 
     private final static int FRAME_TYPE_DATA = 2;
@@ -32,18 +36,31 @@ public class SnifTask extends Task<SnifParams, SnifProgress, SnifResult> {
 
     private Map<String, TrafficFlow> mTrafficFlow;
     private Map<String, Station> mStations;
+    private Integer mPacketCount;
+    private Integer mCorruptedPacketCount;
+    private Integer mIgnoredPacketCount;
 
     private native boolean parsePcap(String capFile);
 
-    public SnifTask(Context context, AsyncTaskListener<SnifParams, SnifProgress, SnifResult> listener) {
+    public SnifTask(Context context, AsyncTaskListener<SnifTask.Params, SnifTask.Progress, SnifTask.Result> listener) {
         super(context, listener);
         mDataDir = mContext.getDir("pcap", Context.MODE_PRIVATE);
         mWifiManager = (WifiManager) mContext.getSystemService(Context.WIFI_SERVICE);
-    }
-
-    private void startParsing() {
         mTrafficFlow = new HashMap<String, TrafficFlow>();
         mStations = new HashMap<String, Station>();
+    }
+
+    /**
+     * Before parsing any packets, clear storage, and update scan results.
+     */
+    private void startParsing() {
+        mTrafficFlow.clear();
+        mStations.clear();
+
+        mCorruptedPacketCount = 0;
+        mPacketCount = 0;
+        mIgnoredPacketCount = 0;
+
         for (ScanResult result : mWifiManager.getScanResults()) {
             String key = Station.getKey(result.BSSID);
             if (!mStations.containsKey(key)) {
@@ -53,9 +70,15 @@ public class SnifTask extends Task<SnifParams, SnifProgress, SnifResult> {
         }
     }
 
+    /**
+     * This function get called on each packet.
+     */
     private void gotPacket(Packet pkt) {
+        mPacketCount++;
+
         if (!pkt.crcOK) {
             Log.d(TAG, "Corrupted packet detected.");
+            mCorruptedPacketCount++;
             return;
         }
 
@@ -96,8 +119,8 @@ public class SnifTask extends Task<SnifParams, SnifProgress, SnifResult> {
             to = null;
         }
 
-
-        if (pkt.type != FRAME_TYPE_DATA || !(pkt.subtype == FRAME_SUBTYPE_DATA || pkt.subtype == FRAME_SUBTYPE_QOS_DATA)) {
+        if (pkt.type != FRAME_TYPE_DATA || !(pkt.subtype == FRAME_SUBTYPE_DATA || pkt.subtype == FRAME_SUBTYPE_QOS_DATA) || from == null || to == null) {
+            mIgnoredPacketCount++;
             return;
         }
 
@@ -125,45 +148,17 @@ public class SnifTask extends Task<SnifParams, SnifProgress, SnifResult> {
         Log.d(TAG, from.toString() + " ===> " + to.toString() + ": " + flow.totalBytes());
     }
 
-    private boolean ifaceUp(boolean up) {
-        String[] cmd = {"ifconfig", MONITOR_IFACE, up? "up": "down"};
-        Object[] result = Utils.call(cmd, -1, true);
-        int exitCode = (Integer) result[0];
-        if (exitCode == 0) {
-            Log.d(TAG, "Successfully bring " + (up? "up": "down") +  " monitor iface.");
-            return true;
-        }
-        else {
-            String err = (String) result[2];
-            Log.e(TAG, "Failed to bring up monitor interface (" + exitCode + "): " + err);
-            return false;
-        }
-    }
-
-    private boolean setChannel(int chan) {
-        String[] cmd = new String[]{"iw", "phy0", "set", "channel", Integer.toString(chan)};
-        Object[] result = Utils.call(cmd, -1, true);
-        Integer exitCode = (Integer) result[0];
-        if (exitCode == 0) {
-            return true;
-        }
-        else {
-            String err = (String) result[2];
-            Log.e(TAG, "Failed to set channel (" + exitCode + "): " + err);
-            return false;
-        }
-    }
-
     @Override
-    protected SnifResult doInBackground(SnifParams... params) {
+    protected SnifTask.Result doInBackground(SnifTask.Params... params) {
         Log.d(TAG, "do in background.");
 
-        SnifResult result = new SnifResult();
+        SnifTask.Result result = new SnifTask.Result();
+        SnifTask.Progress progress = new SnifTask.Progress();
 
         List<String> cmdBase = new ArrayList<String>();
         cmdBase.addAll(Arrays.asList(new String[]{"tcpdump", "-i", MONITOR_IFACE, "-n", "-s", "0"}));
 
-        SnifParams param = params[0];
+        SnifTask.Params param = params[0];
 
         mWifiManager.disconnect();
 
@@ -173,11 +168,23 @@ public class SnifTask extends Task<SnifParams, SnifProgress, SnifResult> {
                 break;
             }
 
-            if (!ifaceUp(true)) {
+            try {
+                if (!Utils.ifaceUp(MONITOR_IFACE, true)) {
+                    continue;
+                }
+            }
+            catch (Exception e) {
+                Log.e(TAG, "Failed to bring up iface " + MONITOR_IFACE + ".", e);
                 continue;
             }
 
-            if (!setChannel(chan)) {
+            try {
+                if (!Utils.setChannel(WL_DEV_NAME, chan)) {
+                    continue;
+                }
+            }
+            catch (Exception e) {
+                Log.e(TAG, "Failed to set channel", e);
                 continue;
             }
 
@@ -195,7 +202,14 @@ public class SnifTask extends Task<SnifParams, SnifProgress, SnifResult> {
                 cmd.add(Integer.toString(param.packetCount));
             }
 
-            Object[] res = Utils.call(cmd.toArray(new String[]{}), param.durationSec, true);
+            Object[] res;
+            try {
+                res = Utils.call(cmd.toArray(new String[]{}), param.durationSec, true);
+            }
+            catch (Exception e) {
+                Log.e(TAG, "Failed to snif.", e);
+                continue;
+            }
             Integer exitValue = (Integer) res[0];
             String err = (String) res[2];
             if (exitValue != 0) {
@@ -203,28 +217,115 @@ public class SnifTask extends Task<SnifParams, SnifProgress, SnifResult> {
                 continue;
             }
 
+
             cmd.clear();
             cmd.add("chown");
-            cmd.add(Integer.toString(Utils.getMyUid(mContext)));
+            try {
+                cmd.add(Integer.toString(Utils.getMyUid(mContext)));
+            }
+            catch (Exception e) {
+                Log.e(TAG, "Failed to get my uid.", e);
+                continue;
+            }
             cmd.add(capFile.getAbsolutePath());
-            Utils.call(cmd.toArray(new String[]{}), -1, true);
+            try {
+                Utils.call(cmd.toArray(new String[]{}), -1, true);
+            }
+            catch (Exception e) {
+                Log.e(TAG, "Failed to change file ownership.", e);
+                continue;
+            }
 
             startParsing();
-            if (parsePcap(capFile.getAbsolutePath())) {
-                result.channelTraffic.put(chan, mTrafficFlow.values());
-                result.channelStation.put(chan, mStations.values());
-            }
-            else {
+            if (!parsePcap(capFile.getAbsolutePath())) {
                 Log.e(TAG, "Failed to parse cap file.");
+                continue;
             }
+
+            progress.channelFinished = chan;
+            progress.apFound = 0;
+            progress.deviceFound = 0;
+            for (Station station : mStations.values()) {
+                if (station.freq != chan) {
+                    continue;
+                }
+                if (station.SSID != null) {
+                    progress.apFound++;
+                }
+                else {
+                    progress.deviceFound++;
+                }
+            }
+            progress.trafficVolumeBytes = 0;
+            for (TrafficFlow flow : mTrafficFlow.values()) {
+                progress.trafficVolumeBytes += flow.totalBytes();
+            }
+            progress.totalPackets = mPacketCount;
+            progress.corruptedPackets = mCorruptedPacketCount;
+            progress.ignoredPackets = mIgnoredPacketCount;
+
+            publishProgress(progress);
+
+            result.channelTraffic.put(chan, mTrafficFlow.values());
+            result.channelStation.put(chan, mStations.values());
+            result.totalPackets += mPacketCount;
+            result.corruptedPackets += mCorruptedPacketCount;
+            result.ignoredPackets += mIgnoredPacketCount;
         }
-        ifaceUp(false);
+        try {
+            Utils.ifaceUp(MONITOR_IFACE, false);
+        }
+        catch (Exception e) {
+            Log.e(TAG, "Failed to bring down iface " + MONITOR_IFACE + ".", e);
+        }
         mWifiManager.reconnect();
         return result;
     }
+
+    public static class Params {
+        public int[] channels;
+        public int durationSec;
+        public int packetCount;
+
+        public Params(int[] channels) {
+            this.channels = channels;
+            durationSec = -1;
+            packetCount = -1;
+        }
+    }
+
+    public static class Progress {
+        public int channelFinished;
+        public int apFound;
+        public int deviceFound;
+        public int trafficVolumeBytes;
+        public int totalPackets;
+        public int corruptedPackets;
+        public int ignoredPackets;
+    }
+
+    public static class Result {
+        public Map<Integer, Iterable<TrafficFlow>> channelTraffic;
+        public Map<Integer, Iterable<Station>> channelStation;
+        public int totalPackets;
+        public int corruptedPackets;
+        public int ignoredPackets;
+
+        public Result () {
+            channelTraffic = new HashMap<Integer, Iterable<TrafficFlow>>();
+            channelStation = new HashMap<Integer, Iterable<Station>>();
+            totalPackets = 0;
+            corruptedPackets = 0;
+            ignoredPackets = 0;
+        }
+    }
 }
 
-/** A wireless station. Could be AP or device. */
+/**
+ * A wireless station.
+ *
+ * Could be AP or device.
+ */
 class Station {
     public String mac;
     public transient String manufacturerShort;
@@ -249,7 +350,12 @@ class Station {
 
     @Override
     public String toString() {
-        return Utils.dumpFieldsAsJSON(this).toString();
+        try {
+            return Utils.dumpFieldsAsJSON(this).toString();
+        }
+        catch (Exception e) {
+            return "<unknown>";
+        }
     }
 
     public static String getKey(String mac) {
@@ -296,7 +402,7 @@ class TrafficFlow {
     }
 
     public static String getKey(Station from, Station to) {
-        return Utils.join("-", new String[]{from.mac, to.mac});
+        return TextUtils.join("-", new String[]{from.mac, to.mac});
     }
 
     @Override
@@ -323,40 +429,14 @@ class Packet {
 
     @Override
     public String toString() {
-        return Utils.dumpFieldsAsJSON(this).toString();
+        try {
+            return Utils.dumpFieldsAsJSON(this).toString();
+        }
+        catch (Exception e) {
+            return "<unknown";
+        }
     }
 }
 
 
-/** SnifTask parameters. */
-class SnifParams {
-    public int[] channels;
-    public int durationSec;
-    public int packetCount;
 
-    public SnifParams(int[] channels) {
-        this.channels = channels;
-        durationSec = -1;
-        packetCount = -1;
-    }
-}
-
-
-/** Progress update of SnifTask. */
-class SnifProgress {
-    public int channelFinished;
-    public int apFound;
-    public int deviceFound;
-    public int trafficVolumeBytes;
-}
-
-/** Result of SnifTask. */
-class SnifResult {
-    public Map<Integer, Iterable<TrafficFlow>> channelTraffic;
-    public Map<Integer, Iterable<Station>> channelStation;
-
-    public SnifResult () {
-        channelTraffic = new HashMap<Integer, Iterable<TrafficFlow>>();
-        channelStation = new HashMap<Integer, Iterable<Station>>();
-    }
-}

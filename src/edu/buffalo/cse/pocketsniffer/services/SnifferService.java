@@ -1,4 +1,4 @@
-package edu.buffalo.cse.pocketsniffer;
+package edu.buffalo.cse.pocketsniffer.services;
 
 import android.app.Service;
 import android.content.BroadcastReceiver;
@@ -13,6 +13,11 @@ import android.net.wifi.WifiManager;
 import android.os.AsyncTask;
 import android.os.IBinder;
 import android.util.Log;
+
+import edu.buffalo.cse.pocketsniffer.tasks.ServerTask;
+import edu.buffalo.cse.pocketsniffer.tasks.SnifTask;
+import edu.buffalo.cse.pocketsniffer.utils.OUI;
+import edu.buffalo.cse.pocketsniffer.utils.Utils;
 
 public class SnifferService extends Service {
     private final String TAG = Utils.getTag(this.getClass());
@@ -82,7 +87,7 @@ public class SnifferService extends Service {
         public void onReceive(Context context, Intent intent) {
             Log.d(TAG, "Intent fired, action is " + intent.getAction());
 
-            SnifParams params = new SnifParams(new int[]{1, 6, 11});
+            SnifTask.Params params = new SnifTask.Params(new int[]{1, 6, 11});
             params.packetCount = 500;
             (new SnifTask(mContext, null)).executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, params);
         }
@@ -122,7 +127,7 @@ public class SnifferService extends Service {
         registerReceiver(mScanResultReceiver, new IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION));
         registerReceiver(mSnifReceiver, mSnifIntentFilter);
 
-        ServerParams params = new ServerParams();
+        ServerTask.Params params = new ServerTask.Params();
         params.port = LISTEN_PORT;
         mServerTask.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, params);
 

@@ -1,15 +1,14 @@
-package edu.buffalo.cse.pocketsniffer;
+package edu.buffalo.cse.pocketsniffer.utils;
 
 import java.io.BufferedReader;
-import java.io.IOException;
 import java.io.InputStreamReader;
-import java.util.Formatter;
 import java.util.HashMap;
 import java.util.Map;
 
 import android.content.Context;
-import android.content.res.Resources;
 import android.util.Log;
+
+import edu.buffalo.cse.pocketsniffer.R;
 
 public class OUI {
     private static final String TAG = Utils.getTag(OUI.class);
