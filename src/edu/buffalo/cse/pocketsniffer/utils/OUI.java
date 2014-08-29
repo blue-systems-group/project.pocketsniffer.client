@@ -6,6 +6,9 @@ import java.util.HashMap;
 import java.util.Map;
 
 import android.content.Context;
+import android.database.sqlite.SQLiteDatabase;
+import android.database.sqlite.SQLiteOpenHelper;
+import android.provider.BaseColumns;
 import android.util.Log;
 
 import edu.buffalo.cse.pocketsniffer.R;
@@ -43,11 +46,11 @@ public class OUI {
                     continue;
                 }
                 String ouiKey = parts[0];
-                String shortName = parts[1];
+                String shortName = parts[1].trim();
                 parts = line.split("#");
                 String longName = shortName;
                 if (parts.length >= 2) {
-                    longName = parts[1];
+                    longName = parts[1].trim();
                 }
                 mOuiMap.put(ouiKey, new String[]{shortName, longName});
             }
@@ -80,15 +83,46 @@ public class OUI {
     }
 
     public static String[] lookup(String mac) {
-        if (!mInitialized) {
-            Log.e(TAG, "Look up OUI while not initialized.");
-            return null;
-        }
         String ouiKey = getOuiKey(mac);
         if (!mOuiMap.containsKey(ouiKey)) {
             Log.w(TAG, "Unknown OUI " + ouiKey);
             mOuiMap.put(ouiKey, new String[]{"Unknown", "Unknown"});
         }
         return mOuiMap.get(ouiKey);
+    }
+}
+
+class OUIOpenHelper extends SQLiteOpenHelper {
+
+    public static final class OUIEntry implements BaseColumns {
+        public static final String TABLE_NAME = "oui.db";
+        public static final String COLUMN_NAME_OUI = "oui";
+        public static final String COLUMN_NAME_SHORT_NAME = "short_name";
+        public static final String COLUMN_NAME_LONG_NAME = "long_name";
+        public static final int DATABASE_VERSION = 1;
+    }
+
+    private static final String TEXT_TYPE = " TEXT";
+    private static final String COMMA_SEP = ",";
+
+    private static final String SQL_CREATE_ENTRIES =
+        "CREATE TABLE " + OUIEntry.TABLE_NAME + " (" +
+        OUIEntry._ID + " INTEGER PRIMARY KEY," +
+        OUIEntry.COLUMN_NAME_OUI + TEXT_TYPE + COMMA_SEP +
+        OUIEntry.COLUMN_NAME_SHORT_NAME + TEXT_TYPE + COMMA_SEP +
+        OUIEntry.COLUMN_NAME_LONG_NAME + TEXT_TYPE + COMMA_SEP +
+        " )";
+
+    public OUIOpenHelper(Context context) {
+        super(context, OUIEntry.TABLE_NAME, null, OUIEntry.DATABASE_VERSION);
+    }
+
+    @Override
+    public void onCreate(SQLiteDatabase db) {
+        db.execSQL(SQL_CREATE_ENTRIES);
+    }
+
+    public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+        // do nothing
     }
 }

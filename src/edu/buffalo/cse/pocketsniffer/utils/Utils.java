@@ -388,4 +388,38 @@ public class Utils {
             return false;
         }
     }
+
+    public static String getVersionName(Context context) throws PackageManager.NameNotFoundException {
+        PackageInfo info = context.getPackageManager().getPackageInfo(context.getPackageName(), 0);
+        return info.versionName;
+    }
+
+    public static int getVersionCode(Context context) throws PackageManager.NameNotFoundException {
+        PackageInfo info = context.getPackageManager().getPackageInfo(context.getPackageName(), 0);
+        return info.versionCode;
+    }
+
+    public static int freqToChannel(int freq) throws IllegalArgumentException {
+        if (freq >= 2412 && freq <= 2472) {
+            return (freq - 2412) / 5 + 1;
+        }
+        else if (freq >= 5180 && freq <= 5825) {
+            return (freq - 5180) / 5 + 36;
+        }
+        else {
+            throw new IllegalArgumentException();
+        }
+    }
+
+    public static int channelToFreq(int chan) throws IllegalArgumentException {
+        if (chan >= 1 && chan <= 13) {
+            return 2412 + (chan-1)*5;
+        }
+        else if (chan >= 36 && chan <= 165) {
+            return 5180 + (chan-36)*5;
+        }
+        else {
+            throw new IllegalArgumentException();
+        }
+    }
 }

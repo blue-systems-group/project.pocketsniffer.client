@@ -24,9 +24,9 @@
   <application android:label="@string/app_name"
       android:allowBackup='true'
       android:icon="@drawable/ic_launcher"
-      android:theme="@android:style/Theme.Holo"
+      android:theme="@android:style/Theme.Holo.Light"
       >
-    <activity android:name="MainActivity"
+    <activity android:name=".ui.MainActivity"
         android:label="@string/app_name">
       <intent-filter>
         <action android:name="android.intent.action.MAIN" />
@@ -34,9 +34,9 @@
       </intent-filter>
     </activity>
 
-    <service android:name=".SnifferService">
+    <service android:name=".services.SnifferService">
       <intent-filter>
-        <action android:name="edu.buffalo.cse.pocketsniffer.SnifferService" />
+        <action android:name="edu.buffalo.cse.pocketsniffer.services.SnifferService" />
         <action android:name="android.intent.action.BOOT_COMPLETE" />
       </intent-filter>
     </service>

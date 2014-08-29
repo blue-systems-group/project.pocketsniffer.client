@@ -8,13 +8,15 @@ import android.app.Activity;
 import android.app.Fragment;
 import android.app.FragmentTransaction;
 import android.content.Context;
+import android.content.Intent;
 import android.os.Bundle;
-import android.view.MenuInflater;
-import android.view.MenuItem;
 import android.support.v13.app.FragmentPagerAdapter;
 import android.support.v4.view.ViewPager;
+import android.view.MenuInflater;
+import android.view.MenuItem;
 
 import edu.buffalo.cse.pocketsniffer.R;
+import edu.buffalo.cse.pocketsniffer.services.SnifferService;
 import edu.buffalo.cse.pocketsniffer.utils.Utils;
 
 public class MainActivity extends Activity {
@@ -37,12 +39,14 @@ public class MainActivity extends Activity {
 
         mTabsAdapter = new TabsAdapter(this, mViewPager);
         mTabsAdapter.addTab(actionBar.newTab().setText("Info"), InfoFragment.class, null);
-        mTabsAdapter.addTab(actionBar.newTab().setText("Stats"), StatsFragment.class, null);
-        mTabsAdapter.addTab(actionBar.newTab().setText("Experiments"), ExperimentFragment.class, null);
+        mTabsAdapter.addTab(actionBar.newTab().setText("Access Points"), APFragment.class, null);
+        mTabsAdapter.addTab(actionBar.newTab().setText("Results"), ResultFragment.class, null);
 
         if (savedInstanceState != null) {
             actionBar.setSelectedNavigationItem(savedInstanceState.getInt("tab", 0));
         }
+
+        startService(new Intent(this, SnifferService.class));
     }
 
     @Override
@@ -54,10 +58,6 @@ public class MainActivity extends Activity {
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
-        switch (item.getItemId()) {
-            case R.id.action_settings :
-                break;
-        }
         return true;
     }
 
