@@ -7,7 +7,7 @@
     android:sharedUserId="android.uid.system"
     >
 
-  <uses-sdk android:minSdkVersion="18" android:targetSdkVersion="18" />
+  <uses-sdk android:minSdkVersion="19" android:targetSdkVersion="19" />
 
   <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
   <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />

@@ -16,7 +16,6 @@ import android.util.Log;
 
 import edu.buffalo.cse.pocketsniffer.tasks.ServerTask;
 import edu.buffalo.cse.pocketsniffer.tasks.SnifTask;
-import edu.buffalo.cse.pocketsniffer.utils.OUI;
 import edu.buffalo.cse.pocketsniffer.utils.Utils;
 
 public class SnifferService extends Service {
@@ -154,7 +153,6 @@ public class SnifferService extends Service {
         Log.v(TAG, "======== Creating PocketSniffer Service ========");
 
         mContext = this;
-        OUI.initOuiMap(mContext);
 
         mWifiManager = (WifiManager) mContext.getSystemService(Context.WIFI_SERVICE);
 

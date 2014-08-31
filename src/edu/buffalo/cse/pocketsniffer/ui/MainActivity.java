@@ -17,6 +17,7 @@ import android.view.MenuItem;
 
 import edu.buffalo.cse.pocketsniffer.R;
 import edu.buffalo.cse.pocketsniffer.services.SnifferService;
+import edu.buffalo.cse.pocketsniffer.tasks.OUITask;
 import edu.buffalo.cse.pocketsniffer.utils.Utils;
 
 public class MainActivity extends Activity {
@@ -47,6 +48,14 @@ public class MainActivity extends Activity {
         }
 
         startService(new Intent(this, SnifferService.class));
+
+        OUITask task = new OUITask(this, null);
+        task.execute(null);
+        try {
+            task.get();
+        }
+        catch (Exception e) {
+        }
     }
 
     @Override
