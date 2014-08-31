@@ -49,10 +49,9 @@ public class MainActivity extends Activity {
 
         startService(new Intent(this, SnifferService.class));
 
-        OUITask task = new OUITask(this, null);
-        task.execute(null);
         try {
-            task.get();
+            // this is pretty fast, so no need to show progress bar.
+            (new OUITask(this, null)).execute(null).get();
         }
         catch (Exception e) {
         }
