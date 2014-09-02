@@ -10,10 +10,10 @@ import java.util.Map;
 import android.content.Context;
 import android.net.wifi.ScanResult;
 import android.net.wifi.WifiManager;
-import android.text.TextUtils;
 import android.util.Log;
 
-import edu.buffalo.cse.pocketsniffer.utils.OUI;
+import edu.buffalo.cse.pocketsniffer.interfaces.Station;
+import edu.buffalo.cse.pocketsniffer.interfaces.TrafficFlow;
 import edu.buffalo.cse.pocketsniffer.utils.Utils;
 
 public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.Result> {
@@ -34,11 +34,13 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
     private File mDataDir;
     private WifiManager mWifiManager;
 
-    private Map<String, TrafficFlow> mTrafficFlow;
-    private Map<String, Station> mStations;
+    private Map<String, TrafficFlow> mTrafficFlowCache;
+    private Map<String, Station> mStationCache;
     private Integer mPacketCount;
     private Integer mCorruptedPacketCount;
     private Integer mIgnoredPacketCount;
+
+    private Result mLastResult;
 
     private native boolean parsePcap(String capFile);
 
@@ -46,16 +48,16 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
         super(context, listener);
         mDataDir = mContext.getDir("pcap", Context.MODE_PRIVATE);
         mWifiManager = (WifiManager) mContext.getSystemService(Context.WIFI_SERVICE);
-        mTrafficFlow = new HashMap<String, TrafficFlow>();
-        mStations = new HashMap<String, Station>();
+        mTrafficFlowCache = new HashMap<String, TrafficFlow>();
+        mStationCache = new HashMap<String, Station>();
     }
 
     /**
      * Before parsing any packets, clear storage, and update scan results.
      */
     private void startParsing() {
-        mTrafficFlow.clear();
-        mStations.clear();
+        mTrafficFlowCache.clear();
+        mStationCache.clear();
 
         mCorruptedPacketCount = 0;
         mPacketCount = 0;
@@ -63,8 +65,8 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
 
         for (ScanResult result : mWifiManager.getScanResults()) {
             String key = Station.getKey(result.BSSID);
-            if (!mStations.containsKey(key)) {
-                mStations.put(key, new Station(result));
+            if (!mStationCache.containsKey(key)) {
+                mStationCache.put(key, new Station(result));
                 Log.d(TAG, "Putting " + result.SSID + " (" + key + ")");
             }
         }
@@ -88,17 +90,18 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
 
         if (pkt.addr2 != null) {
             key = Station.getKey(pkt.addr2);
-            if (!mStations.containsKey(key)) {
+            if (!mStationCache.containsKey(key)) {
                 from = new Station(pkt.addr2);
                 from.freq = pkt.freq;
-                mStations.put(key, from);
+                mStationCache.put(key, from);
             }
             else {
-                from = mStations.get(key);
+                from = mStationCache.get(key);
             }
             if (pkt.SSID != null) {
                 from.SSID = pkt.SSID;
             }
+            from.rssiList.add(pkt.rssi);
         }
         else {
             from = null;
@@ -106,35 +109,35 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
 
         if (!BROADCAST_MAC.equals(pkt.addr1)) {
             key = Station.getKey(pkt.addr1);
-            if (!mStations.containsKey(key)) {
+            if (!mStationCache.containsKey(key)) {
                 to = new Station(pkt.addr1);
                 to.freq = pkt.freq;
-                mStations.put(key, to);
+                mStationCache.put(key, to);
             }
             else {
-                to = mStations.get(key);
+                to = mStationCache.get(key);
             }
         }
         else {
             to = null;
         }
 
+        // only count data packets for traffic volumns
         if (pkt.type != FRAME_TYPE_DATA || !(pkt.subtype == FRAME_SUBTYPE_DATA || pkt.subtype == FRAME_SUBTYPE_QOS_DATA) || from == null || to == null) {
             mIgnoredPacketCount++;
             return;
         }
 
         key = TrafficFlow.getKey(from, to);
-        if (!mTrafficFlow.containsKey(key)) {
+        if (!mTrafficFlowCache.containsKey(key)) {
             flow = new TrafficFlow(from, to);
             flow.startMs = pkt.tv_sec * 1000 + pkt.tv_usec / 1000;
-            mTrafficFlow.put(key, flow);
+            mTrafficFlowCache.put(key, flow);
         }
         else {
-            flow = mTrafficFlow.get(key);
+            flow = mTrafficFlowCache.get(key);
         }
 
-        flow.rssiList.add(pkt.rssi);
         flow.packetSizeList.add(pkt.len);
         if (flow.direction == TrafficFlow.DIRECTION_UNKNOWN) {
             if (from.SSID != null) {
@@ -145,13 +148,10 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
             }
         }
         flow.endMs = pkt.tv_sec * 1000 + pkt.tv_usec / 1000;
-        Log.d(TAG, from.toString() + " ===> " + to.toString() + ": " + flow.totalBytes());
     }
 
     @Override
     protected SnifTask.Result doInBackground(SnifTask.Params... params) {
-        Log.d(TAG, "do in background.");
-
         SnifTask.Result result = new SnifTask.Result();
         SnifTask.Progress progress = new SnifTask.Progress();
 
@@ -188,7 +188,7 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
                 continue;
             }
 
-            Log.d(TAG, "Sniffing channel " + chan + "...");
+            Log.d(TAG, "Sniffing channel " + chan + " ...");
 
             List<String> cmd = new ArrayList<String>();
             cmd.addAll(cmdBase);
@@ -204,7 +204,7 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
 
             Object[] res;
             try {
-                res = Utils.call(cmd.toArray(new String[]{}), param.durationSec, true);
+                res = Utils.call(cmd, param.durationSec, true);
             }
             catch (Exception e) {
                 Log.e(TAG, "Failed to snif.", e);
@@ -229,7 +229,7 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
             }
             cmd.add(capFile.getAbsolutePath());
             try {
-                Utils.call(cmd.toArray(new String[]{}), -1, true);
+                Utils.call(cmd, -1, true);
             }
             catch (Exception e) {
                 Log.e(TAG, "Failed to change file ownership.", e);
@@ -245,7 +245,7 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
             progress.channelFinished = chan;
             progress.apFound = 0;
             progress.deviceFound = 0;
-            for (Station station : mStations.values()) {
+            for (Station station : mStationCache.values()) {
                 if (station.freq != chan) {
                     continue;
                 }
@@ -257,7 +257,7 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
                 }
             }
             progress.trafficVolumeBytes = 0;
-            for (TrafficFlow flow : mTrafficFlow.values()) {
+            for (TrafficFlow flow : mTrafficFlowCache.values()) {
                 progress.trafficVolumeBytes += flow.totalBytes();
             }
             progress.totalPackets = mPacketCount;
@@ -266,8 +266,8 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
 
             publishProgress(progress);
 
-            result.channelTraffic.put(chan, mTrafficFlow.values());
-            result.channelStation.put(chan, mStations.values());
+            result.channelTraffic.put(chan, mTrafficFlowCache.values());
+            result.channelStation.put(chan, mStationCache.values());
             result.totalPackets += mPacketCount;
             result.corruptedPackets += mCorruptedPacketCount;
             result.ignoredPackets += mIgnoredPacketCount;
@@ -279,7 +279,13 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
             Log.e(TAG, "Failed to bring down iface " + MONITOR_IFACE + ".", e);
         }
         mWifiManager.reconnect();
+        result.updated = System.currentTimeMillis();
+        mLastResult = result;
         return result;
+    }
+
+    public Result getLastResult() {
+        return mLastResult;
     }
 
     public static class Params {
@@ -310,6 +316,7 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
         public int totalPackets;
         public int corruptedPackets;
         public int ignoredPackets;
+        public long updated;
 
         public Result () {
             channelTraffic = new HashMap<Integer, Iterable<TrafficFlow>>();
@@ -317,97 +324,8 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
             totalPackets = 0;
             corruptedPackets = 0;
             ignoredPackets = 0;
+            updated = 0L;
         }
-    }
-}
-
-/**
- * A wireless station.
- *
- * Could be AP or device.
- */
-class Station {
-    public String mac;
-    public transient String manufacturerShort;
-    public transient String manufacturerLong;
-    public String SSID;
-    public int freq;
-
-    public Station(String mac) {
-        this.mac = mac.toUpperCase();
-        String[] manufactureInfo = OUI.lookup(mac);
-        manufacturerShort = manufactureInfo[0];
-        manufacturerLong = manufactureInfo[1];
-        SSID = null;
-        freq = -1;
-    }
-
-    public Station(ScanResult result) {
-        this(result.BSSID);
-        SSID = result.SSID;
-        freq = result.frequency;
-    }
-
-    @Override
-    public String toString() {
-        try {
-            return Utils.dumpFieldsAsJSON(this).toString();
-        }
-        catch (Exception e) {
-            return "<unknown>";
-        }
-    }
-
-    public static String getKey(String mac) {
-        return mac.toUpperCase();
-    }
-}
-
-/** Traffic flow between a pair of stations. */
-class TrafficFlow {
-    public Station from;
-    public Station to;
-    public List<Integer> rssiList;
-    public List<Integer> packetSizeList;
-    public int direction;
-    public long startMs;
-    public long endMs;
-
-    public static final int DIRECTION_DOWNLINK = 0;
-    public static final int DIRECTION_UPLINK = 1;
-    public static final int DIRECTION_UNKNOWN = 2;
-
-    public TrafficFlow(Station from, Station to) {
-        this.from = from;
-        this.to = to;
-        rssiList = new ArrayList<Integer>();
-        packetSizeList = new ArrayList<Integer>();
-        direction = DIRECTION_UNKNOWN;
-    }
-
-    public int avgRSSI() {
-        Integer sum = 0;
-        for (Integer i : rssiList) {
-            sum += i;
-        }
-        return (int)(sum.doubleValue() / rssiList.size());
-    }
-
-    public int totalBytes() {
-        Integer sum = 0;
-        for (Integer i : packetSizeList) {
-            sum += i;
-        }
-        return sum;
-    }
-
-    public static String getKey(Station from, Station to) {
-        return TextUtils.join("-", new String[]{from.mac, to.mac});
-    }
-
-    @Override
-    public String toString() {
-        return null;
     }
 }
 

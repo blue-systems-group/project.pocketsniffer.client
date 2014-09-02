@@ -23,7 +23,6 @@ public class SnifferService extends Service {
 
     // wifi configuration
     private final String POCKETSNIFFER_SSID = "PocketSniffer";
-    private final String PASSWORD = "AUDeORc1haIwvHuM6oeJOYhMAFYTffeC";
     private final int PRIORITY = 99999999;
     private final int LISTEN_PORT = 8000;
 
@@ -42,11 +41,6 @@ public class SnifferService extends Service {
 
             Log.d(TAG, "Intent fired, action is " + action);
 
-            if (!WifiManager.SCAN_RESULTS_AVAILABLE_ACTION.equals(action)) {
-                Log.d(TAG, "Unrelated intent. Skipping.");
-                return;
-            }
-
             if (!mWifiManager.isWifiEnabled()) {
                 Log.d(TAG, "Wifi disabled by user. Skipping.");
                 return;
@@ -55,7 +49,7 @@ public class SnifferService extends Service {
             if (Utils.hasNetworkConnection(mContext, ConnectivityManager.TYPE_WIFI)) {
                 WifiInfo wifiInfo = mWifiManager.getConnectionInfo();
                 String currentSSID = Utils.stripQuotes(wifiInfo.getSSID());
-                if (currentSSID.equals(POCKETSNIFFER_SSID)) {
+                if (POCKETSNIFFER_SSID.equals(currentSSID)) {
                     Log.d(TAG, "Already connected to SSID " + POCKETSNIFFER_SSID + ". Skipping.");
                     return;
                 }
@@ -66,16 +60,17 @@ public class SnifferService extends Service {
                     continue;
                 }
                 if (result.level <= MIN_RSSI_LEVEL) {
-                    Log.d(TAG, "Found SSID " + POCKETSNIFFER_SSID + ", yet signal strength is low (" + result.level + ").");
+                    Log.d(TAG, "Found SSID " + POCKETSNIFFER_SSID + ", yet signal strength is low (" + result.level + " dBm).");
                     return;
                 }
-                Log.d(TAG, "Found SSID " + POCKETSNIFFER_SSID + ", signal strength: " + result.level);
-                int networkId = addConfiguration();
+                Log.d(TAG, "Found SSID " + POCKETSNIFFER_SSID + ", signal strength: " + result.level + " dBm.");
+                int networkId = getOrCreateConfiguration();
                 mWifiManager.disconnect();
                 mWifiManager.enableNetwork(networkId, true);
                 mWifiManager.reconnect();
-                break;
+                return;
             }
+            Log.d(TAG, "No SSID " + POCKETSNIFFER_SSID + " found.");
         }
     };
 
@@ -98,7 +93,7 @@ public class SnifferService extends Service {
      *
      * @return networkID of Wifi configration.
      * */
-    private int addConfiguration() {
+    private int getOrCreateConfiguration() {
         for (WifiConfiguration config : mWifiManager.getConfiguredNetworks()) {
             if (POCKETSNIFFER_SSID.equals(Utils.stripQuotes(config.SSID))) {
                 mWifiManager.removeNetwork(config.networkId);
@@ -109,6 +104,7 @@ public class SnifferService extends Service {
         WifiConfiguration config = new WifiConfiguration();
         config.SSID = Utils.addQuotes(POCKETSNIFFER_SSID);
         config.priority = PRIORITY;
+        config.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
         return mWifiManager.addNetwork(config);
     }
 
@@ -153,9 +149,7 @@ public class SnifferService extends Service {
         Log.v(TAG, "======== Creating PocketSniffer Service ========");
 
         mContext = this;
-
         mWifiManager = (WifiManager) mContext.getSystemService(Context.WIFI_SERVICE);
-
         mServerTask = new ServerTask(mContext, null);
     }
 

@@ -7,6 +7,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.lang.reflect.Field;
 import java.net.Inet4Address;
 import java.net.InetAddress;
@@ -83,6 +84,30 @@ public class Utils {
         return sb.toString();
     }
 
+    public static int copyStream(InputStream in, OutputStream out) throws IOException {
+        byte[] buffer = new byte[100*1024];
+        int len;
+        int total_len = 0;
+        try {
+            while ((len = in.read(buffer)) > 0) {
+                total_len += len;
+                out.write(buffer, 0, len);
+            }
+            return total_len;
+        }
+        catch (IOException e) {
+            throw e;
+        }
+        finally {
+            try {
+                out.flush();
+                out.close();
+                in.close();
+            }
+            catch (Exception ex) {}
+        }
+    }
+
     /** 
      * Call a shell command using su, get result.
      *
@@ -146,6 +171,10 @@ public class Utils {
     public static Object[] call(String[] cmd, int timeoutSec, boolean su) throws InterruptedException, IOException {
         String cmdOneLine = TextUtils.join(" ", cmd);
         return call(cmdOneLine, timeoutSec, su);
+    }
+
+    public static Object[] call(List<String> cmd, int timeoutSec, boolean su) throws InterruptedException, IOException {
+        return call(cmd.toArray(new String[]{}), timeoutSec, su);
     }
 
     /** 

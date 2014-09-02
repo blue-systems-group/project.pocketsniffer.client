@@ -1,59 +1,92 @@
 package edu.buffalo.cse.pocketsniffer.ui;
 
 import java.util.ArrayList;
+import java.util.List;
 
 import android.app.ActionBar;
 import android.app.ActionBar.Tab;
 import android.app.Activity;
 import android.app.Fragment;
+import android.app.FragmentManager;
 import android.app.FragmentTransaction;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
 import android.support.v13.app.FragmentPagerAdapter;
 import android.support.v4.view.ViewPager;
+import android.util.Log;
 import android.view.MenuInflater;
 import android.view.MenuItem;
+import android.view.Window;
 
 import edu.buffalo.cse.pocketsniffer.R;
+import edu.buffalo.cse.pocketsniffer.interfaces.Refreshable;
 import edu.buffalo.cse.pocketsniffer.services.SnifferService;
-import edu.buffalo.cse.pocketsniffer.tasks.OUITask;
+import edu.buffalo.cse.pocketsniffer.utils.OUI;
 import edu.buffalo.cse.pocketsniffer.utils.Utils;
 
 public class MainActivity extends Activity {
 
     private static final String TAG = Utils.getTag(MainActivity.class); 
+    private static final String KEY_TAB = "tab";
 
+    private Context mContext;
+    private ActionBar mActionBar;
     private ViewPager mViewPager;
     private TabsAdapter mTabsAdapter;
 
+    private List<TabInfo> mTabInfos;
+
+    class TabInfo {
+        public String title;
+        public Class<?> cls;
+        public Object instance;
+
+        public TabInfo(String title, Class<?> cls) {
+            this.title = title;
+            this.cls = cls;
+            instance = null;
+        }
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        requestWindowFeature(Window.FEATURE_INDETERMINATE_PROGRESS);
+
         super.onCreate(savedInstanceState);
+
+        mContext = this;
+        mActionBar = getActionBar();
 
         mViewPager = new ViewPager(this);
         mViewPager.setId(R.id.pager);
         setContentView(mViewPager);
 
-        ActionBar actionBar = getActionBar();
-        actionBar.setNavigationMode(ActionBar.NAVIGATION_MODE_TABS);
+        mTabInfos = new ArrayList<TabInfo>();
+        mTabInfos.add(new TabInfo("Info", InfoFragment.class));
+        mTabInfos.add(new TabInfo("Access Points", APFragment.class));
+        mTabInfos.add(new TabInfo("Devices", DeviceFragment.class));
 
-        mTabsAdapter = new TabsAdapter(this, mViewPager);
-        mTabsAdapter.addTab(actionBar.newTab().setText("Info"), InfoFragment.class, null);
-        mTabsAdapter.addTab(actionBar.newTab().setText("Access Points"), APFragment.class, null);
-        mTabsAdapter.addTab(actionBar.newTab().setText("Results"), ResultFragment.class, null);
+        mActionBar.setNavigationMode(ActionBar.NAVIGATION_MODE_TABS);
 
-        if (savedInstanceState != null) {
-            actionBar.setSelectedNavigationItem(savedInstanceState.getInt("tab", 0));
+        mTabsAdapter = new TabsAdapter(getFragmentManager());
+        for (TabInfo info : mTabInfos) {
+            mTabsAdapter.addTab(mActionBar.newTab().setText(info.title), info);
+        }
+        mViewPager.setAdapter(mTabsAdapter);
+        mViewPager.setOnPageChangeListener(mTabsAdapter);
+
+        try {
+            OUI.initDB(this);
+        }
+        catch (Exception e) {
+            Log.e(TAG, "Failed to initialized OUI DB.", e);
         }
 
         startService(new Intent(this, SnifferService.class));
 
-        try {
-            // this is pretty fast, so no need to show progress bar.
-            (new OUITask(this, null)).execute(null).get();
-        }
-        catch (Exception e) {
+        if (savedInstanceState != null) {
+            mActionBar.setSelectedNavigationItem(savedInstanceState.getInt(KEY_TAB, 0));
         }
     }
 
@@ -66,6 +99,18 @@ public class MainActivity extends Activity {
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
+        switch (item.getItemId()) {
+            case R.id.action_settings :
+                Log.d(TAG, "Settings button clicked.");
+                break;
+            case R.id.action_refresh :
+                Log.d(TAG, "Refresh button clicked.");
+                TabInfo info = mTabInfos.get(getActionBar().getSelectedNavigationIndex());
+                if (info.instance != null && info.instance instanceof Refreshable) {
+                    ((Refreshable) info.instance).refresh();
+                }
+                break;
+        }
         return true;
     }
 
@@ -73,15 +118,23 @@ public class MainActivity extends Activity {
     @Override
     protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
-        outState.putInt("tab", getActionBar().getSelectedNavigationIndex());
+        outState.putInt(KEY_TAB, mActionBar.getSelectedNavigationIndex());
     }
 
 
     final class TabsAdapter extends FragmentPagerAdapter implements ActionBar.TabListener, ViewPager.OnPageChangeListener {
-        private final Context mContext;
-        private final ActionBar mActionBar;
-        private final ViewPager mViewPager;
-        private final ArrayList<TabInfo> mTabs = new ArrayList<TabInfo>();
+
+        public TabsAdapter(FragmentManager fm) {
+            super(fm);
+        }
+
+        public void addTab(Tab tab, TabInfo info) {
+            tab.setTag(info);
+            tab.setTabListener(this);
+            mActionBar.addTab(tab);
+            notifyDataSetChanged();
+        }
+
 
         @Override
         public void onTabReselected(Tab tab, FragmentTransaction ft) {
@@ -89,55 +142,23 @@ public class MainActivity extends Activity {
 
         @Override
         public void onTabSelected(Tab tab, android.app.FragmentTransaction ft) {
-            Object tag = tab.getTag();
-            for (int i=0; i< mTabs.size(); i++) {
-                if (mTabs.get(i) == tag) {
-                    mViewPager.setCurrentItem(i);
-                }
-            }
+            mViewPager.setCurrentItem(mTabInfos.indexOf(tab.getTag()));
         }
 
         @Override
         public void onTabUnselected(Tab tab, android.app.FragmentTransaction ft) {
         }
 
-        final class TabInfo {
-            private final Class<?> cls;
-            private final Bundle args;
-
-            TabInfo(Class<?> _class, Bundle _args) {
-                cls = _class;
-                args = _args;
-            }
-        }
-
-        public TabsAdapter(Activity activity, ViewPager pager) {
-            super(activity.getFragmentManager());
-            mContext = activity;
-            mActionBar = activity.getActionBar();
-            mViewPager = pager;
-            mViewPager.setAdapter(this);
-            mViewPager.setOnPageChangeListener(this);
-        }
-
-        public void addTab(ActionBar.Tab tab, Class<?> cls, Bundle args) {
-            TabInfo info = new TabInfo(cls, args);
-            tab.setTag(info);
-            tab.setTabListener(this);
-            mTabs.add(info);
-            mActionBar.addTab(tab);
-            notifyDataSetChanged();
-        }
-
         @Override
         public int getCount() {
-            return mTabs.size();
+            return mTabInfos.size();
         }
 
         @Override
         public Fragment getItem(int position) {
-            TabInfo info = mTabs.get(position);
-            return Fragment.instantiate(mContext, info.cls.getName(), info.args);
+            TabInfo info = mTabInfos.get(position);
+            info.instance = Fragment.instantiate(mContext, info.cls.getName());
+            return (Fragment) info.instance;
         }
 
         @Override

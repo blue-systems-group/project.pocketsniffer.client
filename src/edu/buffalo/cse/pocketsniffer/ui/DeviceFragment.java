@@ -5,7 +5,6 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
-import android.app.Activity;
 import android.app.Fragment;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -22,18 +21,17 @@ import android.widget.AdapterView;
 import android.widget.BaseAdapter;
 import android.widget.ListView;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import edu.buffalo.cse.pocketsniffer.R;
-import edu.buffalo.cse.pocketsniffer.interfaces.Refreshable;
+import edu.buffalo.cse.pocketsniffer.interfaces.Constants;
 import edu.buffalo.cse.pocketsniffer.utils.OUI;
 import edu.buffalo.cse.pocketsniffer.utils.Utils;
 
-public class APFragment extends Fragment implements Refreshable {
+public class DeviceFragment extends Fragment implements Constants {
 
-    private static final String TAG = Utils.getTag(APFragment.class);
+    private static final String TAG = Utils.getTag(DeviceFragment.class);
 
-    private List<ScanResult> mListData;
+    private List<Station> mListData;
     private ListViewAdapter mAdapter;
     private LayoutInflater mInflater;
     private Context mContext;
@@ -44,7 +42,6 @@ public class APFragment extends Fragment implements Refreshable {
         @Override
         public void onReceive(Context context, Intent intent) {
             Log.d(TAG, "Intent fired, action is " + intent.getAction());
-            ((Activity) mContext).setProgressBarIndeterminateVisibility(false);
             updateListData();
         }
     };
@@ -98,19 +95,6 @@ public class APFragment extends Fragment implements Refreshable {
         mContext.unregisterReceiver(mScanResultReceiver);
     }
 
-    @Override
-    public void refresh() {
-        mWifiManager.startScan();
-        ((Activity) mContext).setProgressBarIndeterminateVisibility(true);
-    }
-
-    @Override
-    public void onResume() {
-        super.onResume();
-
-        refresh();
-    }
-
     final class ListViewAdapter extends BaseAdapter implements AdapterView.OnItemClickListener {
 
         @Override
@@ -131,7 +115,7 @@ public class APFragment extends Fragment implements Refreshable {
         @Override
         public View getView(int position, View convertView, ViewGroup parent) {
             if (convertView == null) {
-                convertView = mInflater.inflate(R.layout.ap_list_item, null);
+                convertView = mInflater.inflate(R.layout.device_list_item, null);
             }
             ScanResult result = mListData.get(position);
 
@@ -151,7 +135,7 @@ public class APFragment extends Fragment implements Refreshable {
                 sb.append(String.valueOf(Utils.freqToChannel(result.frequency)));
             }
             catch (Exception e) {
-                sb.append(OUI.UNKNOWN);
+                sb.append(UNKNOWN);
             }
             sb.append(" (" + result.frequency + " MHz)");
             sb.append(" " + result.level + " dBm");
