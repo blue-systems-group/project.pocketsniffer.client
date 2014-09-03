@@ -15,7 +15,6 @@ import android.os.IBinder;
 import android.util.Log;
 
 import edu.buffalo.cse.pocketsniffer.tasks.ServerTask;
-import edu.buffalo.cse.pocketsniffer.tasks.SnifTask;
 import edu.buffalo.cse.pocketsniffer.utils.Utils;
 
 public class SnifferService extends Service {
@@ -80,10 +79,6 @@ public class SnifferService extends Service {
         @Override
         public void onReceive(Context context, Intent intent) {
             Log.d(TAG, "Intent fired, action is " + intent.getAction());
-
-            SnifTask.Params params = new SnifTask.Params(new int[]{1, 6, 11});
-            params.packetCount = 500;
-            (new SnifTask(mContext, null)).executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, params);
         }
     };
 

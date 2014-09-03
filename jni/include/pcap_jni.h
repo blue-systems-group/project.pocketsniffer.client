@@ -85,5 +85,5 @@ typedef struct dot11_header {
 
 #define DOT11_TAG_SSID          0
 
-JNIEXPORT jboolean JNICALL Java_edu_buffalo_cse_pocketsniffer_SnifTask_parsePcap(JNIEnv* env, jobject this, jstring file);
+JNIEXPORT jboolean JNICALL Java_edu_buffalo_cse_pocketsniffer_tasks_SnifTask_parsePcap(JNIEnv* env, jobject this, jstring file);
 #endif /* _PCAP_JNI_H_ */

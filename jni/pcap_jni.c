@@ -17,6 +17,9 @@ static int get_ssid(const uint8_t* pkt, size_t pkt_len, char* buf, size_t buf_le
 
 static void dump_pkt(const uint8_t* pkt, size_t len);
 
+#define PACKET_CLASS        "edu/buffalo/cse/pocketsniffer/interfaces/Packet"
+#define SNIFTASK_CLASS      "edu/buffalo/cse/pocketsniffer/tasks/SnifTask"
+
 static JavaVM* g_vm;
 
 static jclass g_packet_class;
@@ -52,7 +55,7 @@ jint JNI_OnLoad(JavaVM* vm, void* reserved)
         return JNI_ERR;
     }
 
-    g_packet_class = get_class(env, "edu/buffalo/cse/pocketsniffer/Packet");
+    g_packet_class = get_class(env, PACKET_CLASS);
     if (g_packet_class == NULL) {
         return JNI_ERR;
     }
@@ -69,12 +72,12 @@ jint JNI_OnLoad(JavaVM* vm, void* reserved)
         }
     }
 
-    g_snif_task_class = get_class(env, "edu/buffalo/cse/pocketsniffer/SnifTask");
+    g_snif_task_class = get_class(env, SNIFTASK_CLASS);
     if (g_snif_task_class == NULL) {
         return JNI_ERR;
     }
 
-    g_got_pkt = get_method(env, g_snif_task_class,  "gotPacket", "(Ledu/buffalo/cse/pocketsniffer/Packet;)V");
+    g_got_pkt = get_method(env, g_snif_task_class,  "gotPacket", "(L" PACKET_CLASS ";)V");
     if (g_got_pkt == NULL) {
         return JNI_ERR;
     }
@@ -83,7 +86,7 @@ jint JNI_OnLoad(JavaVM* vm, void* reserved)
 }
 
 
-JNIEXPORT jboolean JNICALL Java_edu_buffalo_cse_pocketsniffer_SnifTask_parsePcap(JNIEnv* env, jobject this, jstring file)
+JNIEXPORT jboolean JNICALL Java_edu_buffalo_cse_pocketsniffer_tasks_SnifTask_parsePcap(JNIEnv* env, jobject this, jstring file)
 {
     jboolean ret = false;
 

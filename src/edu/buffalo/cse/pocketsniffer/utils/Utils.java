@@ -73,15 +73,11 @@ public class Utils {
         return "\"" + s + "\"";
     }
 
-    /** Read all contents from input stream. */
+    /** Read all avaiable contents from input stream. */
     public static String readFull(InputStream in) throws IOException {
-        BufferedReader reader = new BufferedReader(new InputStreamReader(in));
-        StringBuilder sb = new StringBuilder();
-        String line = null;
-        while ((line = reader.readLine()) != null) {
-            sb.append(line + "\n");
-        }
-        return sb.toString();
+        byte[] buffer = new byte[in.available()];
+        in.read(buffer);
+        return new String(buffer, "utf-8");
     }
 
     public static int copyStream(InputStream in, OutputStream out) throws IOException {
@@ -123,6 +119,8 @@ public class Utils {
      *  - ret[2] is sub process's err output, String.
      */
     public static Object[] call(String cmd, int timeoutSec, boolean su) throws InterruptedException, IOException {
+        Log.d(TAG, cmd);
+
         Process proc = null;
         Integer retval = -1;
         String output = null;
@@ -146,12 +144,14 @@ public class Utils {
                         Thread.sleep(1000);
                     }
                 }
+                Log.d(TAG, "Time out after " + timeoutSec + " seconds.");
             }
             else {
                 retval = proc.waitFor();
             }
             output = readFull(proc.getInputStream());
             err = readFull(proc.getErrorStream());
+            proc.destroy();
             return new Object[]{retval, output, err};
         }
         catch (InterruptedException e) {
