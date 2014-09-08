@@ -1,4 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">PocketSniffer</string>
+
+    <string name="pref_key_auto_scan">pref_key_auto_scan</string>
+    <string name="pref_key_scan_interval">pref_key_scan_interval</string>
+    <string name="pref_key_channel_dwell_time">pref_key_channel_dwell_time</string>
+    <string name="pref_key_channel_packet_count">pref_key_channel_packet_count</string>
+    <string name="pref_key_channel_2GHz">pref_key_channel_2GHz</string>
+    <string name="pref_key_channel_5GHz">pref_key_channel_5GHz</string>
 </resources>

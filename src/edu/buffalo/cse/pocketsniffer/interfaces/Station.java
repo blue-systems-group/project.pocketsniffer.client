@@ -15,6 +15,9 @@ import edu.buffalo.cse.pocketsniffer.utils.Utils;
  */
 public class Station {
     public String mac;
+    public boolean isAP;
+    /* if isAP is true, then this is AP's SSID, otherwise, this is the AP that
+     * the device connects to */
     public String SSID;
     public int freq;
     public List<Integer> rssiList;
@@ -23,11 +26,13 @@ public class Station {
         this.mac = mac.toUpperCase();
         SSID = null;
         freq = -1;
+        isAP = false;
         rssiList = new ArrayList<Integer>();
     }
 
     public Station(ScanResult result) {
         this(result.BSSID);
+        isAP = true;
         SSID = result.SSID;
         freq = result.frequency;
         rssiList.add(result.level);

@@ -105,6 +105,7 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
             }
             if (pkt.SSID != null) {
                 from.SSID = pkt.SSID;
+                from.isAP = true;
             }
             from.rssiList.add(pkt.rssi);
         }
@@ -131,6 +132,13 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
         if (pkt.type != FRAME_TYPE_DATA || !(pkt.subtype == FRAME_SUBTYPE_DATA || pkt.subtype == FRAME_SUBTYPE_QOS_DATA) || from == null || to == null) {
             mIgnoredPacketCount++;
             return;
+        }
+
+        if (from.isAP && from.SSID != null && !to.isAP) {
+            to.SSID = from.SSID;
+        }
+        if (to.isAP && to.SSID != null && !from.isAP) {
+            from.SSID = to.SSID;
         }
 
         key = TrafficFlow.getKey(from, to);

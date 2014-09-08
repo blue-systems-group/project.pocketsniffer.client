@@ -1,16 +1,20 @@
 package edu.buffalo.cse.pocketsniffer.ui;
 
 import java.util.ArrayList;
-import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 
 import android.app.Fragment;
 import android.app.ProgressDialog;
 import android.content.Context;
 import android.content.DialogInterface;
+import android.content.SharedPreferences;
 import android.net.wifi.WifiManager;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.preference.PreferenceManager;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -52,23 +56,24 @@ public class DeviceFragment extends Fragment implements Constants, Refreshable {
 
 
     private void updateListData() {
-        List<Integer> channels = new ArrayList<Integer>();
-        channels.add(1);
-        channels.add(6);
-        channels.add(11);
+        SharedPreferences sharedPrefrences = PreferenceManager.getDefaultSharedPreferences(mContext);
 
-        for (int i = 36; i <= 48; i += 4) {
-            channels.add(i);
+        List<Integer> channels = new ArrayList<Integer>();
+        for (String chan : sharedPrefrences.getStringSet(getString(R.string.pref_key_channel_2GHz), new HashSet<String>())) {
+            channels.add(Integer.parseInt(chan));
         }
-        for (int i = 149; i <= 161; i += 4) {
-            channels.add(i);
+        for (String chan : sharedPrefrences.getStringSet(getString(R.string.pref_key_channel_5GHz), new HashSet<String>())) {
+            channels.add(Integer.parseInt(chan));
         }
+
+        int channelDwellTime = Integer.parseInt(sharedPrefrences.getString(getString(R.string.pref_key_channel_dwell_time), String.valueOf(DEFAULT_CHANNEL_DWELL_TIME)));
+        int channelPacketCount = Integer.parseInt(sharedPrefrences.getString(getString(R.string.pref_key_channel_packet_count), String.valueOf(DEFAULT_CHANNEL_PACKET_COUNT)));
 
         final ProgressDialog dialog = new ProgressDialog(mContext);
         dialog.setMax(channels.size());
         dialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
 
-        SnifTask.Params params = new SnifTask.Params(channels, 5, 100);
+        SnifTask.Params params = new SnifTask.Params(channels, channelDwellTime, channelPacketCount);
         final SnifTask task = new SnifTask(mContext, new AsyncTaskListener<SnifTask.Params, SnifTask.Progress, SnifTask.Result>() {
 
             @Override
@@ -97,10 +102,30 @@ public class DeviceFragment extends Fragment implements Constants, Refreshable {
                 dialog.incrementProgressBy(1);
 
                 for (Station s : progress.partialResult.channelStation.get(chan)) {
-                    if (s.SSID == null) {
+                    if (!s.isAP) {
                         mListData.add(s);
                     }
                 }
+                Collections.sort(mListData, new Comparator<Station>() {
+
+                    @Override
+                    public int compare(Station lhs, Station rhs) {
+                        if (lhs.SSID != null && rhs.SSID == null) {
+                            return -1;
+                        }
+                        if (lhs.SSID == null && rhs.SSID != null) {
+                            return 1;
+                        }
+                        if (lhs.SSID != null && rhs.SSID != null && !lhs.SSID.equals(rhs.SSID)) {
+                            return lhs.SSID.compareTo(rhs.SSID);
+                        }
+                        if (lhs.freq != rhs.freq) {
+                            return (new Integer(lhs.freq)).compareTo(rhs.freq);
+                        }
+                        return lhs.mac.compareTo(rhs.mac);
+                    }
+
+                });
                 mAdapter.notifyDataSetChanged();
             }
 
@@ -182,6 +207,15 @@ public class DeviceFragment extends Fragment implements Constants, Refreshable {
 
             tv = (TextView) convertView.findViewById(R.id.deviceInfo);
             tv.setText(sb.toString());
+
+            tv = (TextView) convertView.findViewById(R.id.deviceAP);
+            if (station.SSID != null) {
+                tv.setText("Connected to " + station.SSID);
+                tv.setVisibility(View.VISIBLE);
+            }
+            else {
+                tv.setVisibility(View.GONE);
+            }
             
             return convertView;
         }

@@ -102,6 +102,7 @@ public class MainActivity extends Activity {
         switch (item.getItemId()) {
             case R.id.action_settings :
                 Log.d(TAG, "Settings button clicked.");
+                startActivity(new Intent(MainActivity.this, SettingsActivity.class));
                 break;
             case R.id.action_refresh :
                 Log.d(TAG, "Refresh button clicked.");

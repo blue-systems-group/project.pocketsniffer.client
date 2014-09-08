@@ -5,8 +5,8 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
-import android.app.Activity;
 import android.app.Fragment;
+import android.app.ProgressDialog;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -22,7 +22,6 @@ import android.widget.AdapterView;
 import android.widget.BaseAdapter;
 import android.widget.ListView;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import edu.buffalo.cse.pocketsniffer.R;
 import edu.buffalo.cse.pocketsniffer.interfaces.Refreshable;
@@ -38,14 +37,15 @@ public class APFragment extends Fragment implements Refreshable {
     private LayoutInflater mInflater;
     private Context mContext;
     private WifiManager mWifiManager;
+    private ProgressDialog mDialog;
 
     private BroadcastReceiver mScanResultReceiver = new BroadcastReceiver() {
 
         @Override
         public void onReceive(Context context, Intent intent) {
             Log.d(TAG, "Intent fired, action is " + intent.getAction());
-            ((Activity) mContext).setProgressBarIndeterminateVisibility(false);
             updateListData();
+            mDialog.dismiss();
         }
     };
 
@@ -59,6 +59,11 @@ public class APFragment extends Fragment implements Refreshable {
         mInflater = (LayoutInflater) mContext.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
 
         mWifiManager = (WifiManager) mContext.getSystemService(Context.WIFI_SERVICE);
+
+        mDialog = new ProgressDialog(mContext);
+        mDialog.setCancelable(false);
+        mDialog.setCanceledOnTouchOutside(false);
+        mDialog.setMessage("Scanning...");
 
         updateListData();
 
@@ -101,14 +106,12 @@ public class APFragment extends Fragment implements Refreshable {
     @Override
     public void refresh() {
         mWifiManager.startScan();
-        ((Activity) mContext).setProgressBarIndeterminateVisibility(true);
+        mDialog.show();
     }
 
     @Override
     public void onResume() {
         super.onResume();
-
-        refresh();
     }
 
     final class ListViewAdapter extends BaseAdapter implements AdapterView.OnItemClickListener {
