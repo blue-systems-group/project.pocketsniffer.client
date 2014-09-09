@@ -22,6 +22,7 @@ import android.widget.AdapterView;
 import android.widget.BaseAdapter;
 import android.widget.ListView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import edu.buffalo.cse.pocketsniffer.R;
 import edu.buffalo.cse.pocketsniffer.interfaces.Refreshable;
@@ -105,8 +106,15 @@ public class APFragment extends Fragment implements Refreshable {
 
     @Override
     public void refresh() {
-        mWifiManager.startScan();
-        mDialog.show();
+        if (!mWifiManager.isWifiEnabled()) {
+            mListData = new ArrayList<ScanResult>();
+            mAdapter.notifyDataSetChanged();
+            Toast.makeText(mContext, "Wifi is disabled.", Toast.LENGTH_SHORT).show();
+        }
+        else {
+            mWifiManager.startScan();
+            mDialog.show();
+        }
     }
 
     @Override
@@ -161,7 +169,7 @@ public class APFragment extends Fragment implements Refreshable {
 
             tv = (TextView) convertView.findViewById(R.id.apInfo);
             tv.setText(sb.toString());
-            
+
             return convertView;
         }
 
