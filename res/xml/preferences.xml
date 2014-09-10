@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+  <PreferenceCategory android:title="AP Scan">
+    <CheckBoxPreference
+        android:key="@string/pref_key_auto_scan"
+        android:title="Scan automatically"
+        android:defaultValue="false"
+      />
+    <EditTextPreference
+        android:key="@string/pref_key_scan_interval"
+        android:dependency="pref_key_auto_scan"
+        android:title="Scan interval"
+        android:dialogMessage="Set scan interval in seconds."
+        android:inputType="number"
+        android:defaultValue="15"
+      />
+  </PreferenceCategory>
+  <PreferenceCategory android:title="Device Scan">
+    <EditTextPreference
+        android:key="@string/pref_key_channel_dwell_time"
+        android:title="Channel dwell time"
+        android:summary="Maximum snif duration on each channel"
+        android:dialogMessage="Set channel dwell time in seconds."
+        android:inputType="number"
+        android:defaultValue="60"
+      />
+    <EditTextPreference
+        android:key="@string/pref_key_channel_packet_count"
+        android:title="Channel packet count"
+        android:summary="Maximum number of packets to snif on each channel"
+        android:inputType="number"
+        android:defaultValue="1000"
+      />
+    <MultiSelectListPreference
+        android:key="@string/pref_key_channel_2GHz"
+        android:title="2.4GHz Channels"
+        android:summary="Channels to scan at 2.4GHz"
+      />
+    <MultiSelectListPreference
+        android:key="@string/pref_key_channel_5GHz"
+        android:title="5GHz Channels"
+        android:summary="Channels to scan at 5GHz"
+      />
+  </PreferenceCategory>
+</PreferenceScreen>

@@ -38,4 +38,8 @@ public class TrafficFlow {
     public static String getKey(Station from, Station to) {
         return TextUtils.join("-", new String[]{from.mac, to.mac});
     }
+
+    public String getKey() {
+        return TrafficFlow.getKey(this.from, this.to);
+    }
 }

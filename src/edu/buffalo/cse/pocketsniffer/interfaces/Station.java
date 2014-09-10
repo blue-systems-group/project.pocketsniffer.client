@@ -59,6 +59,10 @@ public class Station {
         }
     }
 
+    public String getKey() {
+        return Station.getKey(this.mac);
+    }
+
     public static String getKey(String mac) {
         return mac.toUpperCase();
     }

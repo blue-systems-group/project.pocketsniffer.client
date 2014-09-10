@@ -2,7 +2,7 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:paddingLeft="10dp"
+    android:paddingLeft="35dp"
     android:orientation="vertical"
     >
 
@@ -20,14 +20,6 @@
       android:layout_height="wrap_content"
       android:textSize="14dp"
     />
-
-  <TextView
-      android:id="@+id/deviceAP"
-      android:layout_width="wrap_content"
-      android:layout_height="wrap_content"
-      android:textSize="14dp"
-    />
-
 
   <TextView
       android:id="@+id/deviceInfo"

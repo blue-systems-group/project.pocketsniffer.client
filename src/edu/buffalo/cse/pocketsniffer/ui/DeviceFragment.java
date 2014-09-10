@@ -3,8 +3,10 @@ package edu.buffalo.cse.pocketsniffer.ui;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 
 import android.app.Fragment;
 import android.app.ProgressDialog;
@@ -18,9 +20,8 @@ import android.preference.PreferenceManager;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.AdapterView;
-import android.widget.BaseAdapter;
-import android.widget.ListView;
+import android.widget.BaseExpandableListAdapter;
+import android.widget.ExpandableListView;
 import android.widget.TextView;
 
 import edu.buffalo.cse.pocketsniffer.R;
@@ -28,6 +29,7 @@ import edu.buffalo.cse.pocketsniffer.interfaces.AsyncTaskListener;
 import edu.buffalo.cse.pocketsniffer.interfaces.Constants;
 import edu.buffalo.cse.pocketsniffer.interfaces.Refreshable;
 import edu.buffalo.cse.pocketsniffer.interfaces.Station;
+import edu.buffalo.cse.pocketsniffer.interfaces.TrafficFlow;
 import edu.buffalo.cse.pocketsniffer.tasks.SnifTask;
 import edu.buffalo.cse.pocketsniffer.utils.OUI;
 import edu.buffalo.cse.pocketsniffer.utils.Utils;
@@ -36,8 +38,11 @@ public class DeviceFragment extends Fragment implements Constants, Refreshable {
 
     private static final String TAG = Utils.getTag(DeviceFragment.class);
 
-    private List<Station> mListData;
-    private ListViewAdapter mAdapter;
+    private List<String> mListHeader;
+    private Map<String, List<String>> mListData;
+    private Map<String, Station> mStations;
+    private Map<String, TrafficFlow> mTraffics;
+    private ExpandableListViewAdapter mAdapter;
     private LayoutInflater mInflater;
     private Context mContext;
     private WifiManager mWifiManager;
@@ -46,8 +51,13 @@ public class DeviceFragment extends Fragment implements Constants, Refreshable {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        mListData = new ArrayList<Station>();
-        mAdapter = new ListViewAdapter();
+        mListHeader = new ArrayList<String>();
+        mListData = new HashMap<String, List<String>>();
+
+        mStations = new HashMap<String, Station>();
+        mTraffics = new HashMap<String, TrafficFlow>();
+
+        mAdapter = new ExpandableListViewAdapter();
         mContext = getActivity();
         mInflater = (LayoutInflater) mContext.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
 
@@ -88,7 +98,11 @@ public class DeviceFragment extends Fragment implements Constants, Refreshable {
 
             @Override
             public void onPreExecute() {
+                mListHeader.clear();
                 mListData.clear();
+                mStations.clear();
+                mTraffics.clear();
+
                 mAdapter.notifyDataSetChanged();
                 dialog.show();
             }
@@ -102,27 +116,48 @@ public class DeviceFragment extends Fragment implements Constants, Refreshable {
                 dialog.incrementProgressBy(1);
 
                 for (Station s : progress.partialResult.channelStation.get(chan)) {
-                    if (!s.isAP) {
-                        mListData.add(s);
+                    mStations.put(s.getKey(), s);
+                }
+                for (TrafficFlow t : progress.partialResult.channelTraffic.get(chan)) {
+                    mTraffics.put(t.getKey(), t);
+                    Station ap, device;
+                    if (t.from.isAP) {
+                        ap = t.from;
+                        device = t.to;
+                    }
+                    else {
+                        ap = t.to;
+                        device = t.from;
+                    }
+                    if (!mListData.containsKey(ap.getKey())) {
+                        mListData.put(ap.getKey(), new ArrayList<String>());
+                    }
+                    if (!mListData.get(ap.getKey()).contains(device.getKey())) {
+                        mListData.get(ap.getKey()).add(device.getKey());
                     }
                 }
-                Collections.sort(mListData, new Comparator<Station>() {
+                mListHeader.clear();
+                mListHeader.addAll(mListData.keySet());
+
+                Collections.sort(mListHeader, new Comparator<String>() {
 
                     @Override
-                    public int compare(Station lhs, Station rhs) {
-                        if (lhs.SSID != null && rhs.SSID == null) {
+                    public int compare(String lhs, String rhs) {
+                        Station s1 = mStations.get(lhs);
+                        Station s2 = mStations.get(rhs);
+                        if (s1.freq != s2.freq) {
+                            return (new Integer(s1.freq)).compareTo(s2.freq);
+                        }
+                        if (s1.SSID != null && s2.SSID == null) {
                             return -1;
                         }
-                        if (lhs.SSID == null && rhs.SSID != null) {
+                        if (s1.SSID == null && s2.SSID != null) {
                             return 1;
                         }
-                        if (lhs.SSID != null && rhs.SSID != null && !lhs.SSID.equals(rhs.SSID)) {
-                            return lhs.SSID.compareTo(rhs.SSID);
+                        if (s1.SSID != null && s2.SSID != null && !s1.SSID.equals(s2.SSID)) {
+                            return s1.SSID.compareTo(s2.SSID);
                         }
-                        if (lhs.freq != rhs.freq) {
-                            return (new Integer(lhs.freq)).compareTo(rhs.freq);
-                        }
-                        return lhs.mac.compareTo(rhs.mac);
+                        return s1.mac.compareTo(s2.mac);
                     }
 
                 });
@@ -146,11 +181,9 @@ public class DeviceFragment extends Fragment implements Constants, Refreshable {
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
             Bundle savedInstanceState) {
-        View view = inflater.inflate(R.layout.ap, container, false);
-        ListView lv = (ListView) view.findViewById(R.id.apListView);
+        View view = inflater.inflate(R.layout.traffic, container, false);
+        ExpandableListView lv = (ExpandableListView) view.findViewById(R.id.trafficListView);
         lv.setAdapter(mAdapter);
-        lv.setOnItemClickListener(mAdapter);
-
         return view;
     }
 
@@ -164,65 +197,120 @@ public class DeviceFragment extends Fragment implements Constants, Refreshable {
         updateListData();
     }
 
-    final class ListViewAdapter extends BaseAdapter implements AdapterView.OnItemClickListener {
+    final class ExpandableListViewAdapter extends BaseExpandableListAdapter {
 
         @Override
-        public int getCount() {
-            return mListData.size();
+        public Object getChild(int groupPosition, int childPosition) {
+            String header = mListHeader.get(groupPosition);
+            return mListData.get(header).get(childPosition);
         }
 
         @Override
-        public Object getItem(int position) {
-            return mListData.get(position);
+        public long getChildId(int groupPosition, int childPosition) {
+            return childPosition;
         }
 
         @Override
-        public long getItemId(int position) {
-            return position;
-        }
-
-        @Override
-        public View getView(int position, View convertView, ViewGroup parent) {
+        public View getChildView(int groupPosition, int childPosition,
+                boolean isLastChild, View convertView, ViewGroup parent) {
             if (convertView == null) {
                 convertView = mInflater.inflate(R.layout.device_list_item, null);
             }
-            Station station = mListData.get(position);
+            String header = mListHeader.get(groupPosition);
+
+            Station ap = mStations.get(header);
+            Station device = mStations.get(mListData.get(header).get(childPosition));
+
+            TrafficFlow downlink = mTraffics.get(TrafficFlow.getKey(ap, device));
+            TrafficFlow uplink = mTraffics.get(TrafficFlow.getKey(device, ap));
 
             TextView tv = (TextView) convertView.findViewById(R.id.deviceMac);
-            tv.setText(station.mac);
+            tv.setText(device.mac);
 
             tv = (TextView) convertView.findViewById(R.id.deviceManufacturer);
-            tv.setText(OUI.lookup(station.mac)[1]);
+            tv.setText(OUI.lookup(device.mac)[1]);
 
             StringBuilder sb = new StringBuilder();
-            sb.append("CH ");
-            try {
-                sb.append(String.valueOf(Utils.freqToChannel(station.freq)));
+            sb.append("Avg RSSI: " + device.getAvgRSSI() + " dBm");
+            if (downlink != null) {
+                sb.append(" Downlink: " + Utils.readableSize(downlink.totalBytes()));
             }
-            catch (Exception e) {
-                sb.append(UNKNOWN);
+            if (uplink != null) {
+                sb.append(" Uplink: " + Utils.readableSize(uplink.totalBytes()));
             }
-            sb.append(" (" + station.freq + " MHz)");
-            sb.append(" " + station.getAvgRSSI() + " dBm");
 
             tv = (TextView) convertView.findViewById(R.id.deviceInfo);
             tv.setText(sb.toString());
 
-            tv = (TextView) convertView.findViewById(R.id.deviceAP);
-            if (station.SSID != null) {
-                tv.setText("Connected to " + station.SSID);
-                tv.setVisibility(View.VISIBLE);
-            }
-            else {
-                tv.setVisibility(View.GONE);
-            }
-            
             return convertView;
         }
 
         @Override
-        public void onItemClick(AdapterView<?> parent, View view, int position,
-                long id) {
+        public int getChildrenCount(int groupPosition) {
+            String header = mListHeader.get(groupPosition);
+            return mListData.get(header).size();
+        }
+
+        @Override
+        public Object getGroup(int groupPosition) {
+            return mListHeader.get(groupPosition);
+        }
+
+        @Override
+        public int getGroupCount() {
+            return mListHeader.size();
+        }
+
+        @Override
+        public long getGroupId(int groupPosition) {
+            return groupPosition;
+        }
+
+        @Override
+        public View getGroupView(int groupPosition, boolean isExpanded,
+                View convertView, ViewGroup parent) {
+            if (convertView == null) {
+                convertView = mInflater.inflate(R.layout.ap_list_item, null);
+            }
+
+            String header = mListHeader.get(groupPosition);
+            Station ap = mStations.get(header);
+
+            TextView tv = (TextView) convertView.findViewById(R.id.apSSID);
+            tv.setText(ap.SSID);
+
+            tv = (TextView) convertView.findViewById(R.id.apBSSID);
+            tv.setText(ap.mac);
+
+            tv = (TextView) convertView.findViewById(R.id.apManufacturer);
+            tv.setText(OUI.lookup(ap.mac)[1]);
+
+            StringBuilder sb = new StringBuilder();
+            sb.append("CH ");
+            try {
+                sb.append(String.valueOf(Utils.freqToChannel(ap.freq)));
+            }
+            catch (Exception e) {
+                sb.append(OUI.UNKNOWN);
+            }
+            sb.append(" (" + ap.freq + " MHz)");
+            sb.append(" " + ap.getAvgRSSI() + " dBm");
+            sb.append(" " + mListData.get(header).size() + " devices");
+
+            tv = (TextView) convertView.findViewById(R.id.apInfo);
+            tv.setText(sb.toString());
+
+            return convertView;
+        }
+
+        @Override
+        public boolean hasStableIds() {
+            return false;
+        }
+
+        @Override
+        public boolean isChildSelectable(int groupPosition, int childPosition) {
+            return false;
         }
     }
 }
