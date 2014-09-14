@@ -20,89 +20,81 @@ import edu.buffalo.cse.pocketsniffer.utils.Utils;
 public class SnifferService extends Service {
     private final String TAG = Utils.getTag(this.getClass());
 
-    // wifi configuration
-    private final String POCKETSNIFFER_SSID = "PocketSniffer";
-    private final int PRIORITY = 99999999;
     private final int LISTEN_PORT = 8000;
 
-    private final int MIN_RSSI_LEVEL = -85;
+    private static final String POCKETSNIFFER_SSID = "PocketSniffer";
+    private static final String AP_PASSWORD = "LDR9OXnevs5lBlCjz0MNga2H40DlT2m0";
+    private static final int MIN_RSSI_LEVEL = -80;
 
     private boolean mStarted = false;
     private Context mContext;
     private WifiManager mWifiManager;
     private ServerTask mServerTask;
 
-    private BroadcastReceiver mScanResultReceiver = new BroadcastReceiver() {
-
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            String action = intent.getAction();
-
-            Log.d(TAG, "Intent fired, action is " + action);
-
-            if (!mWifiManager.isWifiEnabled()) {
-                Log.d(TAG, "Wifi disabled by user. Skipping.");
-                return;
-            }
-
-            if (Utils.hasNetworkConnection(mContext, ConnectivityManager.TYPE_WIFI)) {
-                WifiInfo wifiInfo = mWifiManager.getConnectionInfo();
-                String currentSSID = Utils.stripQuotes(wifiInfo.getSSID());
-                if (POCKETSNIFFER_SSID.equals(currentSSID)) {
-                    Log.d(TAG, "Already connected to SSID " + POCKETSNIFFER_SSID + ". Skipping.");
-                    return;
-                }
-            }
-
-            for (ScanResult result : mWifiManager.getScanResults()) {
-                if (!POCKETSNIFFER_SSID.equals(Utils.stripQuotes(result.SSID))) {
-                    continue;
-                }
-                if (result.level <= MIN_RSSI_LEVEL) {
-                    Log.d(TAG, "Found SSID " + POCKETSNIFFER_SSID + ", yet signal strength is low (" + result.level + " dBm).");
-                    return;
-                }
-                Log.d(TAG, "Found SSID " + POCKETSNIFFER_SSID + ", signal strength: " + result.level + " dBm.");
-                int networkId = getOrCreateConfiguration();
-                mWifiManager.disconnect();
-                mWifiManager.enableNetwork(networkId, true);
-                mWifiManager.reconnect();
-                return;
-            }
-            Log.d(TAG, "No SSID " + POCKETSNIFFER_SSID + " found.");
-        }
-    };
-
-    private String mSnifIntentName = this.getClass().getName() + ".Snif";
-    private IntentFilter mSnifIntentFilter = new IntentFilter(mSnifIntentName);
-    private BroadcastReceiver mSnifReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            Log.d(TAG, "Intent fired, action is " + intent.getAction());
-        }
-    };
-
-
-    /** 
-     * Get or create wifi configuration for PocketSniffer Wifi.  
+    /**
+     * Make sure the configuration of Pocketsniffer SSID exists, create one if
+     * necessary.
      *
-     * @return networkID of Wifi configration.
-     * */
-    private int getOrCreateConfiguration() {
+     * @return networkId of PocketSniffer network.
+     */
+    private int getNetworkId() {
+        int networkId = -1;
         for (WifiConfiguration config : mWifiManager.getConfiguredNetworks()) {
             if (POCKETSNIFFER_SSID.equals(Utils.stripQuotes(config.SSID))) {
-                mWifiManager.removeNetwork(config.networkId);
-                break;
+                if (networkId == -1) {
+                    // reuse network id from previous configration.
+                    networkId = config.networkId;
+                }
+                else {
+                    // remove any duplicate entries
+                    mWifiManager.removeNetwork(config.networkId);
+                }
             }
         }
 
-        WifiConfiguration config = new WifiConfiguration();
-        config.SSID = Utils.addQuotes(POCKETSNIFFER_SSID);
-        config.priority = PRIORITY;
-        config.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
-        return mWifiManager.addNetwork(config);
+        WifiConfiguration target = new WifiConfiguration();
+        target.SSID = Utils.addQuotes(POCKETSNIFFER_SSID);
+        target.preSharedKey = Utils.addQuotes(AP_PASSWORD);
+        target.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WPA_PSK, true);
+        target.allowedAuthAlgorithms.set(WifiConfiguration.AuthAlgorithm.OPEN, true);
+
+        if (networkId == -1) {
+            networkId = mWifiManager.addNetwork(target);
+        }
+        else {
+            target.networkId = networkId;
+            mWifiManager.updateNetwork(target);
+        }
+        return networkId;
     }
 
+    private void handleScanResult(Intent intent) {
+        if (!mWifiManager.isWifiEnabled()) {
+            Log.d(TAG, "Wifi disabled by user. Skipping.");
+            return;
+        }
+        int networkId = getNetworkId();
+        mWifiManager.enableNetwork(networkId, false /* do not disable others */);
+    }
+
+
+    private BroadcastReceiver mWifiReceiver = new BroadcastReceiver() {
+
+        @Override
+        public synchronized void onReceive(Context context, Intent intent) {
+            String action = intent.getAction();
+            Log.d(TAG, "Intent fired, action is " + action);
+
+            try {
+                if (WifiManager.SCAN_RESULTS_AVAILABLE_ACTION.equals(action)) {
+                    handleScanResult(intent);
+                }
+            }
+            catch (Exception e) {
+                Log.e(TAG, "Failed to handle intent.", e);
+            }
+        }
+    };
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
@@ -114,8 +106,12 @@ public class SnifferService extends Service {
         super.onStartCommand(intent, flags, startId); 
         Log.v(TAG, "======== Starting PocketSniffer Service ======== ");
 
-        registerReceiver(mScanResultReceiver, new IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION));
-        registerReceiver(mSnifReceiver, mSnifIntentFilter);
+        IntentFilter wifiIntentFilter = new IntentFilter();
+        wifiIntentFilter.addAction(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION);
+        wifiIntentFilter.addAction(WifiManager.RSSI_CHANGED_ACTION);
+        wifiIntentFilter.addAction(WifiManager.WIFI_STATE_CHANGED_ACTION);
+        wifiIntentFilter.addAction(WifiManager.SUPPLICANT_STATE_CHANGED_ACTION);
+        registerReceiver(mWifiReceiver, wifiIntentFilter);
 
         ServerTask.Params params = new ServerTask.Params();
         params.port = LISTEN_PORT;
@@ -131,9 +127,7 @@ public class SnifferService extends Service {
         super.onDestroy();
         Log.v(TAG, "======== Destroying PocketSniffer Service ========");
 
-        unregisterReceiver(mScanResultReceiver);
-        unregisterReceiver(mSnifReceiver);
-
+        unregisterReceiver(mWifiReceiver);
         mServerTask.cancel(false);
     }
 

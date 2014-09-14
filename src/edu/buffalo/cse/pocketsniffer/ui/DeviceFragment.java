@@ -17,6 +17,7 @@ import android.net.wifi.WifiManager;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
+import android.text.Html;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -231,7 +232,8 @@ public class DeviceFragment extends Fragment implements Constants, Refreshable {
             tv.setText(OUI.lookup(device.mac)[1]);
 
             StringBuilder sb = new StringBuilder();
-            sb.append("Avg RSSI: " + device.getAvgRSSI() + " dBm");
+            sb.append("Avg RSSI: ");
+            sb.append("<font color=red>" + device.getAvgRSSI() + " dBm</font>");
             if (downlink != null) {
                 sb.append(" Downlink: " + Utils.readableSize(downlink.totalBytes()));
             }
@@ -240,7 +242,7 @@ public class DeviceFragment extends Fragment implements Constants, Refreshable {
             }
 
             tv = (TextView) convertView.findViewById(R.id.deviceInfo);
-            tv.setText(sb.toString());
+            tv.setText(Html.fromHtml(sb.toString()));
 
             return convertView;
         }
@@ -286,19 +288,19 @@ public class DeviceFragment extends Fragment implements Constants, Refreshable {
             tv.setText(OUI.lookup(ap.mac)[1]);
 
             StringBuilder sb = new StringBuilder();
-            sb.append("CH ");
+            sb.append("<font color=blue>CH ");
             try {
                 sb.append(String.valueOf(Utils.freqToChannel(ap.freq)));
             }
             catch (Exception e) {
                 sb.append(OUI.UNKNOWN);
             }
-            sb.append(" (" + ap.freq + " MHz)");
+            sb.append(" (" + ap.freq + " MHz)</font>");
             sb.append(" " + ap.getAvgRSSI() + " dBm");
             sb.append(" " + mListData.get(header).size() + " devices");
 
             tv = (TextView) convertView.findViewById(R.id.apInfo);
-            tv.setText(sb.toString());
+            tv.setText(Html.fromHtml(sb.toString()));
 
             return convertView;
         }

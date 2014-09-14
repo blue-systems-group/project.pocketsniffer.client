@@ -37,7 +37,7 @@
       android:id="@+id/apManufacturer"
       android:layout_width="match_parent"
       android:layout_height="wrap_content"
-      android:textSize="14dp"
+      android:textSize="12dp"
     />
 
   <TextView

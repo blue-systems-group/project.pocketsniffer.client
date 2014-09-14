@@ -461,4 +461,87 @@ public class Utils {
             return new DecimalFormat("#,##0.#").format(size/Math.pow(1024, digitGroups)) + " " + units[digitGroups];
         }
     }
+
+    public static String dumpFields(Object object) {
+        JSONObject json = new JSONObject();
+        for (Field field : getAllFields(object.getClass())) {
+            try {
+                json.put(field.getName(), safeGet(field, object));
+            }
+            catch (Exception e) {
+                Log.e(TAG, "Failed to convert to JSON: " + object.getClass().getName() + "." + field.getName(), e);
+            }
+
+        }
+        return json.toString();
+    }
+
+    public static Object safeGet(Field field, Object object) {
+        boolean accessible = field.isAccessible();
+        Object ret = null;
+
+        if (!accessible) {
+            field.setAccessible(true);
+        }
+        try {
+            ret = field.get(object);
+        }
+        catch (Exception e) {
+            Log.e(TAG, "Failed to get " + object.getClass().getName() + "." + field.getName(), e);
+        }
+        if (!accessible) {
+            field.setAccessible(false);
+        }
+        return ret;
+    }
+
+    public static int computeHash(Object object) {
+        final int prime = 31;
+        int result = 1;
+        for (Field field : getAllFields(object.getClass())) {
+            try {
+                Object obj = safeGet(field, object);
+                result = prime * result + (obj == null? 0: obj.hashCode());
+
+            }
+            catch (Exception e) {
+                Log.e(TAG, "Failed to compute hash: " + object.getClass().getName() + "." + field.getName(), e);
+            }
+        }
+        return result;
+    }
+
+    public static boolean objectEquals(Object obj1, Object obj2) {
+        if (obj1 == obj2) {
+            return true;
+        }
+
+        if (obj1 == null || obj2 == null) {
+            return false;
+        }
+
+        if (obj1.getClass() != obj2.getClass()) {
+            return false;
+        }
+
+        for (Field field : getAllFields(obj1.getClass())) {
+            try {
+                Object f1 = safeGet(field, obj1);
+                Object f2 = safeGet(field, obj2);
+
+                if (f1 == null) {
+                    if (f2 != null) {
+                        return false;
+                    }
+                }
+                else if (!f1.equals(f2)) {
+                    return false;
+                }
+            }
+            catch(Exception e) {
+                Log.e(TAG, "Failed to compare:" + obj1.getClass().getName() + "." + field.getName() + " vs. " + obj2.getClass() + "." + field.getName(), e);
+            }
+        }
+        return true;
+    }
 }
