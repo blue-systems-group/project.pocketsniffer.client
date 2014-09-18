@@ -147,9 +147,17 @@ public class SnifferService extends Service implements ManifestClient {
         builder.setLargeIcon(((BitmapDrawable) mContext.getResources().getDrawable(R.drawable.ic_launcher)).getBitmap());
         builder.setContentTitle("PocketSniffer");
         builder.setTicker("PocketSniffer Wifi available!");
-        builder.setContentText("PocketSniffer Wifi found. Click to connect.");
+        builder.setContentText("PocketSniffer Wifi found.");
+        builder.setSubText("Click to connect.");
         builder.setContentIntent(PendingIntent.getActivity(mContext, 0, new Intent(WifiManager.ACTION_PICK_WIFI_NETWORK), PendingIntent.FLAG_ONE_SHOT));
+        builder.setAutoCancel(true);
         mNotificationManager.notify(WIFI_NOTIFICATION_ID, builder.build());
+    }
+
+    private void handleSupplicantState(Intent intent) {
+    }
+
+    public void handleRSSIChange(Intent intent) {
     }
 
 
@@ -163,6 +171,12 @@ public class SnifferService extends Service implements ManifestClient {
             try {
                 if (WifiManager.SCAN_RESULTS_AVAILABLE_ACTION.equals(action)) {
                     handleScanResult(intent);
+                }
+                else if (WifiManager.SUPPLICANT_STATE_CHANGED_ACTION.equals(action)) {
+                    handleSupplicantState(intent);
+                }
+                else if (WifiManager.RSSI_CHANGED_ACTION.equals(action)) {
+                    handleRSSIChange(intent);
                 }
             }
             catch (Exception e) {
