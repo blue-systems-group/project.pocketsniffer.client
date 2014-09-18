@@ -16,6 +16,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.graphics.drawable.BitmapDrawable;
 import android.net.wifi.ScanResult;
 import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiInfo;
@@ -28,6 +29,7 @@ import edu.buffalo.cse.phonelab.toolkit.android.interfaces.ManifestClient;
 import edu.buffalo.cse.phonelab.toolkit.android.services.ManifestService;
 import edu.buffalo.cse.phonelab.toolkit.android.services.UploaderService;
 import edu.buffalo.cse.phonelab.toolkit.android.utils.Utils;
+import edu.buffalo.cse.pocketsniffer.R;
 import edu.buffalo.cse.pocketsniffer.tasks.ServerTask;
 import edu.buffalo.cse.pocketsniffer.utils.LocalUtils;
 import edu.buffalo.cse.pocketsniffer.utils.Logger;
@@ -110,6 +112,8 @@ public class SnifferService extends Service implements ManifestClient {
     }
 
     private void handleScanResult(Intent intent) {
+        Log.d(TAG, "Handling scan results.");
+
         logScanResult();
 
         int networkId = getNetworkId(mParameters);
@@ -139,6 +143,8 @@ public class SnifferService extends Service implements ManifestClient {
 
         Notification.Builder builder = new Notification.Builder(mContext);
 
+        builder.setSmallIcon(R.drawable.ic_launcher);
+        builder.setLargeIcon(((BitmapDrawable) mContext.getResources().getDrawable(R.drawable.ic_launcher)).getBitmap());
         builder.setContentTitle("PocketSniffer");
         builder.setTicker("PocketSniffer Wifi available!");
         builder.setContentText("PocketSniffer Wifi found. Click to connect.");
