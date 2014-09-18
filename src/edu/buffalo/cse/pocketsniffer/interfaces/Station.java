@@ -5,7 +5,7 @@ import java.util.List;
 
 import android.net.wifi.ScanResult;
 
-import edu.buffalo.cse.pocketsniffer.utils.Utils;
+import edu.buffalo.cse.phonelab.toolkit.android.utils.Utils;
 
 
 /**

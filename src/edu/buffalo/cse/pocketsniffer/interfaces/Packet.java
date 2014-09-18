@@ -1,6 +1,6 @@
 package edu.buffalo.cse.pocketsniffer.interfaces;
 
-import edu.buffalo.cse.pocketsniffer.utils.Utils;
+import edu.buffalo.cse.phonelab.toolkit.android.utils.Utils;
 
 /**
  * All the information we care about a packet. 

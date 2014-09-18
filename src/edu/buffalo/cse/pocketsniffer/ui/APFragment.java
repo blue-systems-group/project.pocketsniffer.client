@@ -24,14 +24,15 @@ import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import edu.buffalo.cse.phonelab.toolkit.android.utils.Utils;
 import edu.buffalo.cse.pocketsniffer.R;
 import edu.buffalo.cse.pocketsniffer.interfaces.Refreshable;
+import edu.buffalo.cse.pocketsniffer.utils.LocalUtils;
 import edu.buffalo.cse.pocketsniffer.utils.OUI;
-import edu.buffalo.cse.pocketsniffer.utils.Utils;
 
 public class APFragment extends Fragment implements Refreshable {
 
-    private static final String TAG = Utils.getTag(APFragment.class);
+    private static final String TAG = LocalUtils.getTag(APFragment.class);
 
     private List<ScanResult> mListData;
     private ListViewAdapter mAdapter;

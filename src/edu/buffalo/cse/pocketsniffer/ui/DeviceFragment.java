@@ -25,6 +25,7 @@ import android.widget.BaseExpandableListAdapter;
 import android.widget.ExpandableListView;
 import android.widget.TextView;
 
+import edu.buffalo.cse.phonelab.toolkit.android.utils.Utils;
 import edu.buffalo.cse.pocketsniffer.R;
 import edu.buffalo.cse.pocketsniffer.interfaces.AsyncTaskListener;
 import edu.buffalo.cse.pocketsniffer.interfaces.Constants;
@@ -32,12 +33,12 @@ import edu.buffalo.cse.pocketsniffer.interfaces.Refreshable;
 import edu.buffalo.cse.pocketsniffer.interfaces.Station;
 import edu.buffalo.cse.pocketsniffer.interfaces.TrafficFlow;
 import edu.buffalo.cse.pocketsniffer.tasks.SnifTask;
+import edu.buffalo.cse.pocketsniffer.utils.LocalUtils;
 import edu.buffalo.cse.pocketsniffer.utils.OUI;
-import edu.buffalo.cse.pocketsniffer.utils.Utils;
 
 public class DeviceFragment extends Fragment implements Constants, Refreshable {
 
-    private static final String TAG = Utils.getTag(DeviceFragment.class);
+    private static final String TAG = LocalUtils.getTag(DeviceFragment.class);
 
     private List<String> mListHeader;
     private Map<String, List<String>> mListData;

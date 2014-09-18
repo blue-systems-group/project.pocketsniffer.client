@@ -4,11 +4,11 @@ import android.content.Context;
 import android.os.AsyncTask;
 import android.util.Log;
 
-import edu.buffalo.cse.pocketsniffer.utils.Utils;
+import edu.buffalo.cse.pocketsniffer.utils.LocalUtils;
 
 public abstract class Task<Params, Progress, Result> extends AsyncTask<Params, Progress, Result> {
 
-    protected final String TAG = Utils.getTag(this.getClass());
+    protected final String TAG = LocalUtils.getTag(this.getClass());
 
     protected AsyncTaskListener<Params, Progress, Result> mListener;
     protected Context mContext;

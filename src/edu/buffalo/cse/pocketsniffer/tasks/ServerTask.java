@@ -10,9 +10,9 @@ import android.content.Context;
 import android.net.ConnectivityManager;
 import android.util.Log;
 
+import edu.buffalo.cse.phonelab.toolkit.android.utils.Utils;
 import edu.buffalo.cse.pocketsniffer.interfaces.AsyncTaskListener;
 import edu.buffalo.cse.pocketsniffer.interfaces.Task;
-import edu.buffalo.cse.pocketsniffer.utils.Utils;
 
 public class ServerTask extends Task<ServerTask.Params, ServerTask.Progress, ServerTask.Result> {
 

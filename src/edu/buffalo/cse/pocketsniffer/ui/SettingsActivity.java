@@ -12,8 +12,8 @@ import android.preference.PreferenceActivity;
 import android.preference.PreferenceManager;
 import android.widget.Toast;
 
+import edu.buffalo.cse.phonelab.toolkit.android.utils.Utils;
 import edu.buffalo.cse.pocketsniffer.R;
-import edu.buffalo.cse.pocketsniffer.utils.Utils;
 
 public class SettingsActivity extends PreferenceActivity {
     private Preference.OnPreferenceChangeListener mCheckNumberListener = new Preference.OnPreferenceChangeListener() {

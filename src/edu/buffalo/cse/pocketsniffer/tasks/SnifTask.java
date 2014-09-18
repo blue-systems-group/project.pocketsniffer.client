@@ -13,12 +13,12 @@ import android.net.wifi.ScanResult;
 import android.net.wifi.WifiManager;
 import android.util.Log;
 
+import edu.buffalo.cse.phonelab.toolkit.android.utils.Utils;
 import edu.buffalo.cse.pocketsniffer.interfaces.AsyncTaskListener;
 import edu.buffalo.cse.pocketsniffer.interfaces.Packet;
 import edu.buffalo.cse.pocketsniffer.interfaces.Station;
 import edu.buffalo.cse.pocketsniffer.interfaces.Task;
 import edu.buffalo.cse.pocketsniffer.interfaces.TrafficFlow;
-import edu.buffalo.cse.pocketsniffer.utils.Utils;
 
 public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.Result> {
 

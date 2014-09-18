@@ -14,11 +14,12 @@ import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.util.Log;
 
+import edu.buffalo.cse.phonelab.toolkit.android.utils.Utils;
 import edu.buffalo.cse.pocketsniffer.R;
 import edu.buffalo.cse.pocketsniffer.interfaces.Constants;
 
 public class OUI implements Constants {
-    private static final String TAG = Utils.getTag(OUI.class);
+    private static final String TAG = LocalUtils.getTag(OUI.class);
 
     private static final String TABLE_NAME = "oui";
     private static final String COLUMN_NAME_OUI = "oui";

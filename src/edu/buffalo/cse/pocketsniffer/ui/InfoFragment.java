@@ -19,13 +19,14 @@ import android.widget.BaseAdapter;
 import android.widget.ListView;
 import android.widget.TextView;
 
+import edu.buffalo.cse.phonelab.toolkit.android.utils.Utils;
 import edu.buffalo.cse.pocketsniffer.R;
-import edu.buffalo.cse.pocketsniffer.utils.Utils;
+import edu.buffalo.cse.pocketsniffer.utils.LocalUtils;
 
 public class InfoFragment extends Fragment {
 
     private static final String UNKNOWN = "Unknown";
-    private static final String TAG = Utils.getTag(InfoFragment.class);
+    private static final String TAG = LocalUtils.getTag(InfoFragment.class);
 
     private static final String PLATFORM_VERISON = "Platform Version";
     private static final String KERNEL_VERSION = "Kernel Version";

@@ -18,16 +18,14 @@ import android.widget.ListView;
 import android.widget.TextView;
 
 import edu.buffalo.cse.pocketsniffer.R;
-import edu.buffalo.cse.pocketsniffer.utils.Utils;
+import edu.buffalo.cse.pocketsniffer.utils.LocalUtils;
 
 public class ResultFragment extends Fragment {
 
     private static final String UNKNOWN = "Unknown";
-    private static final String TAG = Utils.getTag(InfoFragment.class);
+    private static final String TAG = LocalUtils.getTag(ResultFragment.class);
 
     private static final String PLATFORM_VERISON = "Platform Version";
-    private static final String BUILD_ID = "Build ID";
-    private static final String KERNEL_VERSION = "Kernel Version";
 
     private List<String> mListTitle;
     private Map<String, String> mListData;

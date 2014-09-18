@@ -40,9 +40,14 @@
     <service android:name=".services.SnifferService">
       <intent-filter>
         <action android:name="edu.buffalo.cse.pocketsniffer.services.SnifferService" />
-        <action android:name="android.intent.action.BOOT_COMPLETE" />
       </intent-filter>
     </service>
 
+    <receiver android:name=".receivers.StartReceiver">
+      <intent-filter>
+        <action android:name="android.intent.action.BOOT_COMPLETED" />
+        <action android:name="android.intent.action.ACTION_POWER_CONNECTED" />
+      </intent-filter>
+    </receiver>
   </application>
 </manifest>

@@ -22,12 +22,12 @@ import android.view.Window;
 import edu.buffalo.cse.pocketsniffer.R;
 import edu.buffalo.cse.pocketsniffer.interfaces.Refreshable;
 import edu.buffalo.cse.pocketsniffer.services.SnifferService;
+import edu.buffalo.cse.pocketsniffer.utils.LocalUtils;
 import edu.buffalo.cse.pocketsniffer.utils.OUI;
-import edu.buffalo.cse.pocketsniffer.utils.Utils;
 
 public class MainActivity extends Activity {
 
-    private static final String TAG = Utils.getTag(MainActivity.class); 
+    private static final String TAG = LocalUtils.getTag(MainActivity.class); 
     private static final String KEY_TAB = "tab";
 
     private Context mContext;
