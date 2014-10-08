@@ -43,6 +43,9 @@
       </intent-filter>
     </service>
 
+    <service android:name=".services.BenchService" android:exported="true" />
+
+
     <receiver android:name=".receivers.StartReceiver">
       <intent-filter>
         <action android:name="android.intent.action.BOOT_COMPLETED" />
