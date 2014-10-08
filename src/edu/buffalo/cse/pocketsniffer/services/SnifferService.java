@@ -30,6 +30,7 @@ import edu.buffalo.cse.phonelab.toolkit.android.services.ManifestService;
 import edu.buffalo.cse.phonelab.toolkit.android.services.UploaderService;
 import edu.buffalo.cse.phonelab.toolkit.android.utils.Utils;
 import edu.buffalo.cse.pocketsniffer.R;
+import edu.buffalo.cse.pocketsniffer.tasks.BatteryTask;
 import edu.buffalo.cse.pocketsniffer.tasks.ServerTask;
 import edu.buffalo.cse.pocketsniffer.utils.LocalUtils;
 import edu.buffalo.cse.pocketsniffer.utils.Logger;
@@ -50,6 +51,8 @@ public class SnifferService extends Service implements ManifestClient {
     private SnifferServiceParameters mParameters;
     private Logger mLogger;
     private NotificationManager mNotificationManager;
+
+    private BatteryTask mBatteryTask;
 
     /**
      * Make sure the configuration of Pocketsniffer SSID exists, create one if
@@ -227,6 +230,11 @@ public class SnifferService extends Service implements ManifestClient {
 
         startServerTask(mParameters);
 
+        if (mBatteryTask == null) {
+            mBatteryTask = new BatteryTask(mContext);
+        }
+        mBatteryTask.start();
+
         mStarted = true;
         return START_STICKY;
     }
@@ -236,6 +244,9 @@ public class SnifferService extends Service implements ManifestClient {
     public void onDestroy() {
         super.onDestroy();
         Log.v(TAG, "======== Destroying PocketSniffer Service ========");
+
+        mBatteryTask.stop();
+        mBatteryTask = null;
 
         unregisterReceiver(mWifiReceiver);
         mServerTask.cancel(true);
@@ -253,6 +264,8 @@ public class SnifferService extends Service implements ManifestClient {
         mParameters = new SnifferServiceParameters();
         mLogger = Logger.getInstance(mContext);
         mNotificationManager = (NotificationManager) mContext.getSystemService(Context.NOTIFICATION_SERVICE);
+
+        mBatteryTask = new BatteryTask(mContext);
     }
 
     @Override

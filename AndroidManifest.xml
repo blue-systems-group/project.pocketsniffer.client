@@ -37,7 +37,7 @@
 
     <activity android:name=".ui.SettingsActivity" />
 
-    <service android:name=".services.SnifferService">
+    <service android:name=".services.SnifferService" android:exported="true">
       <intent-filter>
         <action android:name="edu.buffalo.cse.pocketsniffer.services.SnifferService" />
       </intent-filter>
