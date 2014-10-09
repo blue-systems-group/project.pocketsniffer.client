@@ -46,8 +46,9 @@ public class BenchService extends Service {
         for (int i = 1; i <= 11; i++) {
             params.channels.add(i);
         }
-        params.durationSec = 30*24*3600;
+        params.durationSec = 60;
         params.packetCount = -1;
+        params.forever = true;
 
         Toast.makeText(mContext, "Sniffing", Toast.LENGTH_LONG).show();
         mSnifTask.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, params);

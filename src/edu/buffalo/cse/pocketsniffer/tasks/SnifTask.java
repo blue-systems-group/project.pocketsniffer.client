@@ -175,99 +175,107 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
 
         mWifiManager.disconnect();
 
-        for (int chan : param.channels) {
-            if (isCancelled()) {
-                Log.d(TAG, "Task cancelled.");
-                break;
-            }
+        do {
+            for (int chan : param.channels) {
+                if (isCancelled()) {
+                    Log.d(TAG, "Task cancelled.");
+                    break;
+                }
 
-            try {
-                if (!Utils.ifaceUp(MONITOR_IFACE, true)) {
+                try {
+                    if (!Utils.ifaceUp(MONITOR_IFACE, true)) {
+                        continue;
+                    }
+                }
+                catch (Exception e) {
+                    Log.e(TAG, "Failed to bring up iface " + MONITOR_IFACE + ".", e);
                     continue;
                 }
-            }
-            catch (Exception e) {
-                Log.e(TAG, "Failed to bring up iface " + MONITOR_IFACE + ".", e);
-                continue;
-            }
 
-            try {
-                if (!Utils.setChannel(WL_DEV_NAME, chan)) {
+                try {
+                    if (!Utils.setChannel(WL_DEV_NAME, chan)) {
+                        continue;
+                    }
+                }
+                catch (Exception e) {
+                    Log.e(TAG, "Failed to set channel", e);
                     continue;
                 }
-            }
-            catch (Exception e) {
-                Log.e(TAG, "Failed to set channel", e);
-                continue;
-            }
 
-            Log.d(TAG, "Sniffing channel " + chan + " ...");
+                Log.d(TAG, "Sniffing channel " + chan + " ...");
 
-            List<String> cmd = new ArrayList<String>();
-            cmd.addAll(cmdBase);
+                List<String> cmd = new ArrayList<String>();
+                cmd.addAll(cmdBase);
 
-            File capFile = new File(mDataDir, "pcap-" + chan + "-" + Utils.getDateTimeString() + ".cap");
-            cmd.add("-w");
-            cmd.add(capFile.getAbsolutePath());
+                File capFile = new File(mDataDir, "pcap-" + chan + "-" + Utils.getDateTimeString() + ".cap");
+                cmd.add("-w");
+                cmd.add(capFile.getAbsolutePath());
 
-            if (param.packetCount > 0) {
-                cmd.add("-c");
-                cmd.add(Integer.toString(param.packetCount));
-            }
+                if (param.packetCount > 0) {
+                    cmd.add("-c");
+                    cmd.add(Integer.toString(param.packetCount));
+                }
 
-            Object[] res;
-            try {
-                res = Utils.call(cmd, param.durationSec, true);
-            }
-            catch (Exception e) {
-                Log.e(TAG, "Failed to snif.", e);
-                continue;
-            }
-            Integer exitValue = (Integer) res[0];
-            String err = (String) res[2];
-            if (param.durationSec < 0 && exitValue != 0) {
-                Log.e(TAG, "Failed to call tcpdump (" + exitValue + "): " + err);
-                continue;
-            }
+                Object[] res;
+                try {
+                    res = Utils.call(cmd, param.durationSec, true);
+                }
+                catch (Exception e) {
+                    Log.e(TAG, "Failed to snif.", e);
+                    continue;
+                }
+                Integer exitValue = (Integer) res[0];
+                String err = (String) res[2];
+                if (param.durationSec < 0 && exitValue != 0) {
+                    Log.e(TAG, "Failed to call tcpdump (" + exitValue + "): " + err);
+                    continue;
+                }
 
-            cmd.clear();
-            cmd.add("chown");
-            try {
-                cmd.add(Integer.toString(Utils.getMyUid(mContext)));
-            }
-            catch (Exception e) {
-                Log.e(TAG, "Failed to get my uid.", e);
-                continue;
-            }
-            cmd.add(capFile.getAbsolutePath());
-            try {
-                Utils.call(cmd, -1, true);
-            }
-            catch (Exception e) {
-                Log.e(TAG, "Failed to change file ownership.", e);
-                continue;
-            }
+                cmd.clear();
+                cmd.add("chown");
+                try {
+                    cmd.add(Integer.toString(Utils.getMyUid(mContext)));
+                }
+                catch (Exception e) {
+                    Log.e(TAG, "Failed to get my uid.", e);
+                    continue;
+                }
+                cmd.add(capFile.getAbsolutePath());
+                try {
+                    Utils.call(cmd, -1, true);
+                }
+                catch (Exception e) {
+                    Log.e(TAG, "Failed to change file ownership.", e);
+                    continue;
+                }
 
-            startParsing();
-            if (!parsePcap(capFile.getAbsolutePath())) {
-                Log.e(TAG, "Failed to parse cap file.");
-                continue;
+                startParsing();
+                if (!parsePcap(capFile.getAbsolutePath())) {
+                    Log.e(TAG, "Failed to parse cap file.");
+                    continue;
+                }
+
+                // delete cap file if we're running forever
+                if (param.forever) {
+                    capFile.delete();
+                }
+
+                result.channelTraffic.put(chan, mTrafficFlowCache.values());
+                result.channelStation.put(chan, mStationCache.values());
+                result.totalPackets += mPacketCount;
+                result.corruptedPackets += mCorruptedPacketCount;
+                result.ignoredPackets += mIgnoredPacketCount;
+
+                progress.channelFinished = chan;
+                progress.totalPackets = mPacketCount;
+                progress.corruptedPackets = mCorruptedPacketCount;
+                progress.ignoredPackets = mIgnoredPacketCount;
+                progress.partialResult = result;
+
+                publishProgress(progress);
             }
+        } while (param.forever);
 
-            result.channelTraffic.put(chan, mTrafficFlowCache.values());
-            result.channelStation.put(chan, mStationCache.values());
-            result.totalPackets += mPacketCount;
-            result.corruptedPackets += mCorruptedPacketCount;
-            result.ignoredPackets += mIgnoredPacketCount;
-
-            progress.channelFinished = chan;
-            progress.totalPackets = mPacketCount;
-            progress.corruptedPackets = mCorruptedPacketCount;
-            progress.ignoredPackets = mIgnoredPacketCount;
-            progress.partialResult = result;
-
-            publishProgress(progress);
-        }
         try {
             Utils.ifaceUp(MONITOR_IFACE, false);
             // bring down wlan0, wpa_supplicant will bring it up, and set it up
@@ -288,16 +296,27 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
 
     public static class Params {
         public List<Integer> channels;
+        // channel dwell time
         public int durationSec;
+        // max number of packets for each channel.
         public int packetCount;
 
+        // sniffing forever, for battery benchmarking
+        public boolean forever;
+
         public Params() {
+            this.channels = new ArrayList<Integer>();
+            durationSec = 60;
+            packetCount = 1000;
+            forever = false;
         }
+
 
         public Params(List<Integer> channels, int durationSec, int packetCount) {
             this.channels = channels;
             this.durationSec = durationSec;
             this.packetCount = packetCount;
+            this.forever = false;
         }
     }
 
