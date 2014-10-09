@@ -11,6 +11,8 @@ import java.util.Map;
 import android.content.Context;
 import android.net.wifi.ScanResult;
 import android.net.wifi.WifiManager;
+import android.os.PowerManager;
+import android.os.PowerManager.WakeLock;
 import android.util.Log;
 
 import edu.buffalo.cse.phonelab.toolkit.android.utils.Utils;
@@ -47,6 +49,8 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
 
     private Result mLastResult;
 
+    private WakeLock mWakeLock;
+
     private native boolean parsePcap(String capFile);
 
     public SnifTask(Context context, AsyncTaskListener<SnifTask.Params, SnifTask.Progress, SnifTask.Result> listener) {
@@ -55,6 +59,9 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
         mWifiManager = (WifiManager) mContext.getSystemService(Context.WIFI_SERVICE);
         mTrafficFlowCache = new HashMap<String, TrafficFlow>();
         mStationCache = new HashMap<String, Station>();
+        
+        PowerManager powerManager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
+        mWakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, TAG);
     }
 
     /**
@@ -175,6 +182,8 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
 
         mWifiManager.disconnect();
 
+        mWakeLock.acquire();
+
         do {
             for (int chan : param.channels) {
                 if (isCancelled()) {
@@ -275,6 +284,8 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
                 publishProgress(progress);
             }
         } while (param.forever);
+
+        mWakeLock.release();
 
         try {
             Utils.ifaceUp(MONITOR_IFACE, false);
