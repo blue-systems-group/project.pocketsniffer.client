@@ -62,8 +62,8 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
         mStationCache = new HashMap<String, Station>();
         
         PowerManager powerManager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
-        mWakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, TAG);
-        mWifiLock = mWifiManager.createWifiLock(TAG);
+        mWakeLock = powerManager.newWakeLock(PowerManager.SCREEN_DIM_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP, TAG);
+        mWifiLock = mWifiManager.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, TAG);
     }
 
     /**
