@@ -50,6 +50,7 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
     private Result mLastResult;
 
     private WakeLock mWakeLock;
+    private WifiManager.WifiLock mWifiLock;
 
     private native boolean parsePcap(String capFile);
 
@@ -62,6 +63,7 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
         
         PowerManager powerManager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
         mWakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, TAG);
+        mWifiLock = mWifiManager.createWifiLock(TAG);
     }
 
     /**
@@ -183,6 +185,7 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
         mWifiManager.disconnect();
 
         mWakeLock.acquire();
+        mWifiLock.acquire();
 
         do {
             for (int chan : param.channels) {
@@ -286,6 +289,7 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
         } while (param.forever);
 
         mWakeLock.release();
+        mWifiLock.release();
 
         try {
             Utils.ifaceUp(MONITOR_IFACE, false);
