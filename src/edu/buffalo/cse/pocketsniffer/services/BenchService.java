@@ -1,6 +1,6 @@
 package edu.buffalo.cse.pocketsniffer.services;
 
-import java.util.ArrayList;
+import java.util.Arrays;
 
 import android.app.Service;
 import android.content.Context;
@@ -41,11 +41,13 @@ public class BenchService extends Service {
 
         mBatteryTask.start();
 
+
+        Integer[] channel_2 = new Integer[]{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
+        Integer[] channel_5 = new Integer[]{36, 40, 42, 44, 48, 149, 153, 157, 161, 165};
+
         SnifTask.Params params = new SnifTask.Params();
-        params.channels = new ArrayList<Integer>();
-        for (int i = 1; i <= 11; i++) {
-            params.channels.add(i);
-        }
+        params.channels = Arrays.asList(channel_5);
+
         params.durationSec = 60;
         params.packetCount = -1;
         params.forever = true;
