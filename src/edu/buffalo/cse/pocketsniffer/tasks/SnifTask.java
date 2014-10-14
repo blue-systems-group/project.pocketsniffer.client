@@ -8,6 +8,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.json.JSONObject;
+
 import android.content.Context;
 import android.net.wifi.ScanResult;
 import android.net.wifi.WifiManager;
@@ -333,6 +335,7 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
             this.packetCount = packetCount;
             this.forever = false;
         }
+
     }
 
     public static class Progress {
@@ -341,6 +344,20 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
         public int corruptedPackets;
         public int ignoredPackets;
         public Result partialResult;
+
+        public JSONObject toJSONObject() {
+            JSONObject json = new JSONObject();
+            try {
+                json.put("channelFinished", channelFinished);
+                json.put("totalPackets", totalPackets);
+                json.put("corruptedPackets", corruptedPackets);
+                json.put("ignoredPackets", ignoredPackets);
+            }
+            catch (Exception e) {
+            }
+
+            return json;
+        }
     }
 
     public static class Result {
