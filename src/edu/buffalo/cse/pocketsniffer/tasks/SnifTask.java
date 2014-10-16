@@ -335,6 +335,7 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
             this.packetCount = packetCount;
             this.forever = false;
         }
+
     }
 
     public static class Progress {
@@ -345,22 +346,17 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
         public Result partialResult;
 
         public JSONObject toJSONObject() {
+            JSONObject json = new JSONObject();
             try {
-                return Utils.dumpFieldsAsJSON(this);
+                json.put("channelFinished", channelFinished);
+                json.put("totalPackets", totalPackets);
+                json.put("corruptedPackets", corruptedPackets);
+                json.put("ignoredPackets", ignoredPackets);
             }
             catch (Exception e) {
-                return null;
             }
-        }
 
-        @Override
-        public String toString() {
-            try {
-                return this.toJSONObject().toString();
-            }
-            catch (Exception e) {
-                return "";
-            }
+            return json;
         }
     }
 

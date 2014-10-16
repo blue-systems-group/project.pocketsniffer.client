@@ -7,8 +7,11 @@ import org.json.JSONObject;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.net.wifi.WifiManager;
 import android.os.AsyncTask;
 import android.os.IBinder;
+import android.os.PowerManager;
+import android.os.PowerManager.WakeLock;
 import android.util.Log;
 import android.widget.Toast;
 
@@ -31,7 +34,12 @@ public class BenchService extends Service {
 
     private Logger mLogger;
 
-    private AsyncTaskListener mSnifTaskListener = new AsyncTaskListener<SnifTask.Params, SnifTask.Progress, SnifTask.Result>() {
+    private WifiManager mWifiManager;
+    private WakeLock mWakeLock;
+    private WifiManager.WifiLock mWifiLock;
+
+
+    private AsyncTaskListener mSnifListener = new AsyncTaskListener<SnifTask.Params, SnifTask.Progress, SnifTask.Result>() {
 
         @Override
         public void onCancelled(Result result) {
@@ -55,7 +63,6 @@ public class BenchService extends Service {
             }
             mLogger.log(json);
         }
-
     };
 
     @Override
@@ -76,17 +83,32 @@ public class BenchService extends Service {
 
         mBatteryTask.start();
 
-        SnifTask.Params params = new SnifTask.Params();
-        params.channels = new ArrayList<Integer>();
-        for (int i = 1; i <= 11; i++) {
-            params.channels.add(i);
-        }
-        params.durationSec = 60;
-        params.packetCount = -1;
-        params.forever = true;
+        boolean snif = true;
 
-        Toast.makeText(mContext, "Sniffing", Toast.LENGTH_LONG).show();
-        mSnifTask.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, params);
+        if (snif) {
+            Integer[] channel_2 = new Integer[]{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
+            Integer[] channel_5 = new Integer[]{36, 40, 42, 44, 48, 149, 153, 157, 161, 165};
+
+            SnifTask.Params params = new SnifTask.Params();
+            params.channels = new ArrayList<Integer>();
+            for (int c : channel_2) {
+                params.channels.add(c);
+            }
+            for (int c : channel_5) {
+                params.channels.add(c);
+            }
+
+            params.packetCount = -1;
+            params.forever = true;
+            mSnifTask.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, params);
+            Toast.makeText(mContext, "Sniffing", Toast.LENGTH_LONG).show();
+        }
+        else {
+            mWakeLock.acquire();
+            mWifiLock.acquire();
+            Toast.makeText(mContext, "Awaking", Toast.LENGTH_LONG).show();
+        }
+
 
         mStarted = true;
         return START_STICKY;
@@ -98,7 +120,13 @@ public class BenchService extends Service {
 
         mContext = this;
         mBatteryTask = new BatteryTask(mContext);
-        mSnifTask = new SnifTask(mContext, mSnifTaskListener);
+        mSnifTask = new SnifTask(mContext, mSnifListener);
         mLogger = Logger.getInstance(mContext);
+        mWifiManager = (WifiManager) mContext.getSystemService(Context.WIFI_SERVICE);
+
+
+        PowerManager powerManager = (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
+        mWakeLock = powerManager.newWakeLock(PowerManager.SCREEN_DIM_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP, TAG);
+        mWifiLock = mWifiManager.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, TAG);
     }
 }
