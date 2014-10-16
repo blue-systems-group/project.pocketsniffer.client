@@ -32,7 +32,7 @@ public class Logger implements UploaderClient {
     public static final String KEY_ACTION = "action";
 
     private static final String TAG = LocalUtils.getTag(Logger.class);
-    private static final int FLUSH_LINES = 16;
+    private static final int FLUSH_LINES = 1;
     private static final int RORATE_LINES = 1024;
     private static final String DEFAULT_UPLOAD_URL = "";
 

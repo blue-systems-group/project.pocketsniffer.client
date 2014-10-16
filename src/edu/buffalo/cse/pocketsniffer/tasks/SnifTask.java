@@ -8,6 +8,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.json.JSONObject;
+
 import android.content.Context;
 import android.net.wifi.ScanResult;
 import android.net.wifi.WifiManager;
@@ -341,6 +343,25 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
         public int corruptedPackets;
         public int ignoredPackets;
         public Result partialResult;
+
+        public JSONObject toJSONObject() {
+            try {
+                return Utils.dumpFieldsAsJSON(this);
+            }
+            catch (Exception e) {
+                return null;
+            }
+        }
+
+        @Override
+        public String toString() {
+            try {
+                return this.toJSONObject().toString();
+            }
+            catch (Exception e) {
+                return "";
+            }
+        }
     }
 
     public static class Result {
