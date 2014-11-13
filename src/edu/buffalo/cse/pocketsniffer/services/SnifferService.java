@@ -31,7 +31,9 @@ import edu.buffalo.cse.phonelab.toolkit.android.services.UploaderService;
 import edu.buffalo.cse.phonelab.toolkit.android.utils.Utils;
 import edu.buffalo.cse.pocketsniffer.R;
 import edu.buffalo.cse.pocketsniffer.tasks.BatteryTask;
+import edu.buffalo.cse.pocketsniffer.tasks.PingTask;
 import edu.buffalo.cse.pocketsniffer.tasks.ServerTask;
+import edu.buffalo.cse.pocketsniffer.tasks.ThroughputTask;
 import edu.buffalo.cse.pocketsniffer.utils.LocalUtils;
 import edu.buffalo.cse.pocketsniffer.utils.Logger;
 
@@ -47,146 +49,18 @@ public class SnifferService extends Service implements ManifestClient {
     private boolean mStarted = false;
     private Context mContext;
     private WifiManager mWifiManager;
-    private ServerTask mServerTask;
+
     private SnifferServiceParameters mParameters;
     private Logger mLogger;
     private NotificationManager mNotificationManager;
 
+    // periodic tasks
     private BatteryTask mBatteryTask;
+    private ServerTask mServerTask;
+    private PingTask mPingTask;
 
-    /**
-     * Make sure the configuration of Pocketsniffer SSID exists, create one if
-     * necessary.
-     *
-     * @return networkId of PocketSniffer network.
-     */
-    private int getNetworkId(SnifferServiceParameters parameters) {
-        int networkId = -1;
-        for (WifiConfiguration config : mWifiManager.getConfiguredNetworks()) {
-            if (parameters.ssid.equals(Utils.stripQuotes(config.SSID))) {
-                if (networkId == -1) {
-                    // reuse network id from previous configration.
-                    networkId = config.networkId;
-                }
-                else {
-                    // remove any duplicate entries
-                    mWifiManager.removeNetwork(config.networkId);
-                }
-            }
-        }
+    private ThroughputTask mThroughputTask;
 
-        WifiConfiguration target = new WifiConfiguration();
-        target.SSID = Utils.addQuotes(parameters.ssid);
-        target.preSharedKey = Utils.addQuotes(parameters.key);
-        target.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WPA_PSK, true);
-        target.allowedAuthAlgorithms.set(WifiConfiguration.AuthAlgorithm.OPEN, true);
-
-        if (networkId == -1) {
-            networkId = mWifiManager.addNetwork(target);
-        }
-        else {
-            target.networkId = networkId;
-            mWifiManager.updateNetwork(target);
-        }
-        return networkId;
-    }
-
-    private void logScanResult() {
-        try {
-            JSONObject json = new JSONObject();
-            JSONArray array = new JSONArray();
-
-            for (ScanResult result : mWifiManager.getScanResults()) {
-                JSONObject r = new JSONObject();
-                r.put("SSID", result.SSID);
-                r.put("BSSID", result.BSSID);
-                r.put("capabilities", result.capabilities);
-                r.put("level", result.level);
-                r.put("frequency", result.frequency);
-                array.put(r);
-            }
-            json.put(Logger.KEY_ACTION, WifiManager.SCAN_RESULTS_AVAILABLE_ACTION);
-            json.put("results", array);
-            mLogger.log(json);
-        }
-        catch (Exception e) {
-            Log.e(TAG, "Failed to log scan results.", e);
-        }
-    }
-
-    private void handleScanResult(Intent intent) {
-        Log.d(TAG, "Handling scan results.");
-
-        logScanResult();
-
-        int networkId = getNetworkId(mParameters);
-        mWifiManager.enableNetwork(networkId, false /* do not disable others */);
-
-        if (!mWifiManager.isWifiEnabled()) {
-            Log.d(TAG, "Wifi disabled by user.");
-            return;
-        }
-
-        WifiInfo info = mWifiManager.getConnectionInfo();
-        if (info != null && mParameters.ssid.equals(Utils.stripQuotes(info.getSSID()))) {
-            Log.d(TAG, "Already connected to " + info.getSSID());
-            return;
-        }
-
-        boolean found = false;
-        for (ScanResult result : mWifiManager.getScanResults()) {
-            if (mParameters.ssid.equals(Utils.stripQuotes(result.SSID)) && result.level >= mParameters.minRSSI) {
-                found = true;
-            }
-        }
-        if (!found) {
-            Log.d(TAG, "No PocketSniffer Wifi found, or signal is too weak.");
-            return;
-        }
-
-        Notification.Builder builder = new Notification.Builder(mContext);
-
-        builder.setSmallIcon(R.drawable.ic_launcher);
-        builder.setLargeIcon(((BitmapDrawable) mContext.getResources().getDrawable(R.drawable.ic_launcher)).getBitmap());
-        builder.setContentTitle("PocketSniffer");
-        builder.setTicker("PocketSniffer Wifi available!");
-        builder.setContentText("PocketSniffer Wifi found.");
-        builder.setSubText("Click to connect.");
-        builder.setContentIntent(PendingIntent.getActivity(mContext, 0, new Intent(WifiManager.ACTION_PICK_WIFI_NETWORK), PendingIntent.FLAG_ONE_SHOT));
-        builder.setAutoCancel(true);
-        mNotificationManager.notify(WIFI_NOTIFICATION_ID, builder.build());
-    }
-
-    private void handleSupplicantState(Intent intent) {
-    }
-
-    public void handleRSSIChange(Intent intent) {
-    }
-
-
-    private BroadcastReceiver mWifiReceiver = new BroadcastReceiver() {
-
-        @Override
-        public synchronized void onReceive(Context context, Intent intent) {
-            String action = intent.getAction();
-            Log.d(TAG, "Intent fired, action is " + action);
-
-            try {
-                if (WifiManager.SCAN_RESULTS_AVAILABLE_ACTION.equals(action)) {
-                    handleScanResult(intent);
-                }
-                else if (WifiManager.SUPPLICANT_STATE_CHANGED_ACTION.equals(action)) {
-                    handleSupplicantState(intent);
-                }
-                else if (WifiManager.RSSI_CHANGED_ACTION.equals(action)) {
-                    handleRSSIChange(intent);
-                }
-            }
-            catch (Exception e) {
-                Log.e(TAG, "Failed to handle intent.", e);
-            }
-        }
-    };
 
     private void startServerTask(SnifferServiceParameters parameters) {
         if (mServerTask.getStatus() == AsyncTask.Status.RUNNING) {
@@ -213,13 +87,6 @@ public class SnifferService extends Service implements ManifestClient {
         super.onStartCommand(intent, flags, startId); 
         Log.v(TAG, "======== Starting PocketSniffer Service ======== ");
 
-        IntentFilter wifiIntentFilter = new IntentFilter();
-        wifiIntentFilter.addAction(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION);
-        wifiIntentFilter.addAction(WifiManager.RSSI_CHANGED_ACTION);
-        wifiIntentFilter.addAction(WifiManager.WIFI_STATE_CHANGED_ACTION);
-        wifiIntentFilter.addAction(WifiManager.SUPPLICANT_STATE_CHANGED_ACTION);
-        registerReceiver(mWifiReceiver, wifiIntentFilter);
-
         Intent manifestIntent = new Intent(mContext, ManifestService.class);
         manifestIntent.putExtra(ManifestService.EXTRA_MANIFEST_URL, DEFAULT_MANIFEST_URL);
         startService(manifestIntent);
@@ -230,10 +97,9 @@ public class SnifferService extends Service implements ManifestClient {
 
         startServerTask(mParameters);
 
-        if (mBatteryTask == null) {
-            mBatteryTask = new BatteryTask(mContext);
-        }
+        mPingTask.start();
         mBatteryTask.start();
+        mThroughputTask.start();
 
         mStarted = true;
         return START_STICKY;
@@ -245,8 +111,9 @@ public class SnifferService extends Service implements ManifestClient {
         super.onDestroy();
         Log.v(TAG, "======== Destroying PocketSniffer Service ========");
 
+        mPingTask.stop();
         mBatteryTask.stop();
-        mBatteryTask = null;
+        mThroughputTask.stop();
 
         unregisterReceiver(mWifiReceiver);
         mServerTask.cancel(true);
@@ -266,6 +133,8 @@ public class SnifferService extends Service implements ManifestClient {
         mNotificationManager = (NotificationManager) mContext.getSystemService(Context.NOTIFICATION_SERVICE);
 
         mBatteryTask = new BatteryTask(mContext);
+        mThroughputTask = new ThroughputTask(mContext);
+        mPingTask = new PingTask(mContext);
     }
 
     @Override
