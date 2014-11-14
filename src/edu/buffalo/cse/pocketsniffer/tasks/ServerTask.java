@@ -5,118 +5,185 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 
 import org.json.JSONObject;
+import org.simpleframework.xml.Element;
+import org.simpleframework.xml.Root;
 
 import android.content.Context;
 import android.net.ConnectivityManager;
+import android.os.AsyncTask;
 import android.util.Log;
 
+import edu.buffalo.cse.phonelab.toolkit.android.periodictask.PeriodicParameters;
+import edu.buffalo.cse.phonelab.toolkit.android.periodictask.PeriodicState;
+import edu.buffalo.cse.phonelab.toolkit.android.periodictask.PeriodicTask;
 import edu.buffalo.cse.phonelab.toolkit.android.utils.Utils;
-import edu.buffalo.cse.pocketsniffer.interfaces.AsyncTaskListener;
-import edu.buffalo.cse.pocketsniffer.interfaces.Task;
+import edu.buffalo.cse.pocketsniffer.utils.LocalUtils;
 
-public class ServerTask extends Task<ServerTask.Params, ServerTask.Progress, ServerTask.Result> {
+public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskState> {
 
-    private static final int BUFFER_SIZE = 1024*1024;
+    private static final String TAG = LocalUtils.getTag(ServerTask.class);
 
-    public ServerTask(Context context, AsyncTaskListener<ServerTask.Params, ServerTask.Progress, ServerTask.Result> listener) {
-        super(context, listener);
+    private ActualServerTask mServerTask = null;
+
+    public ServerTask(Context context) {
+        super(context, ServerTask.class.getSimpleName());
+    }
+
+    public void startServerTask() {
+        if (mServerTask == null) {
+            mServerTask = new ActualServerTask(mParameters.serverPort);
+        }
+
+        switch (mServerTask.getStatus()) {
+            case PENDING:
+            case FINISHED:
+                Log.d(TAG, "Starting server task...");
+                mServerTask.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+                break;
+            case RUNNING:
+                Log.d(TAG, "Server task already running.");
+                break;
+        }
+    }
+
+
+
+    @Override
+    protected void check(ServerTaskParameters arg0) throws Exception {
+        startServerTask();
+    }
+
+
+    @Override
+    public ServerTaskParameters newParameters() {
+        return new ServerTaskParameters();
     }
 
     @Override
-    protected ServerTask.Result doInBackground(ServerTask.Params... params) {
-        ServerTask.Result result = new ServerTask.Result();
-        result.success = false;
+    public ServerTaskParameters newParameters(ServerTaskParameters arg0) {
+        return new ServerTaskParameters(arg0);
+    }
 
-        if (!Utils.hasNetworkConnection(mContext, ConnectivityManager.TYPE_WIFI)) {
-            result.reason = "ServerTask started without Wifi connection.";
-            Log.w(TAG, result.reason);
-            return result;
+    @Override
+    public ServerTaskState newState() {
+        return new ServerTaskState();
+    }
+
+    @Override
+    public Class<ServerTaskParameters> parameterClass() {
+        return ServerTaskParameters.class;
+    }
+
+    @Override
+    public synchronized void stop() {
+        super.stop();
+
+        mServerTask.cancel(true);
+    }
+
+    private class ActualServerTask extends AsyncTask<Void, Void, Void> {
+        private static final int BUFFER_SIZE = 1024*1024;
+
+        private int port;
+
+        public ActualServerTask(int port) {
+            this.port = port;
         }
 
-        InetAddress addr;
-        try {
-            addr = Utils.getIpAddress(mContext);
-        }
-        catch (Exception e) {
-            result.reason = "Failed to get IP address.";
-            Log.e(TAG, result.reason, e);
-            return result;
-        }
+        @Override
+        protected Void doInBackground(Void... params) {
+            if (!Utils.hasNetworkConnection(mContext, ConnectivityManager.TYPE_WIFI)) {
+                Log.w(TAG, "ServerTask started without Wifi connection.");
+                return null;
+            }
 
-        ServerTask.Params param = params[0];
-        DatagramSocket serverSock = null;
-        try {
-            serverSock = new DatagramSocket(param.port, addr);
-            serverSock.setReuseAddress(true);
-            serverSock.setReceiveBufferSize(BUFFER_SIZE);
-            serverSock.setSendBufferSize(BUFFER_SIZE);
-            serverSock.setSoTimeout(0);
-        }
-        catch (Exception e) {
-            result.reason = "Failed to create server socket.";
-            Log.e(TAG, result.reason, e);
-            return result;
-        }
-
-        Log.d(TAG, "Successfully created server UDP socket on port " + param.port);
-
-        byte[] buffer = new byte[BUFFER_SIZE];
-        DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
-        while (!isCancelled() && Utils.hasNetworkConnection(mContext, ConnectivityManager.TYPE_WIFI)) {
+            InetAddress addr;
             try {
-                serverSock.receive(packet);
+                addr = Utils.getIpAddress(mContext);
             }
             catch (Exception e) {
-                Log.e(TAG, "Failed to receive packet.", e);
-                continue;
+                Log.e(TAG, "Failed to get IP address.", e);
+                return null;
             }
 
-            Log.d(TAG, "Receive message:\n" + Utils.dumpHex(buffer, 0, packet.getLength()));
-
-            ServerTask.Progress progress = new ServerTask.Progress();
-            progress.sender = packet.getAddress();
+            DatagramSocket serverSock = null;
             try {
-                progress.message = Utils.decompress(buffer, 0, packet.getLength());
+                serverSock = new DatagramSocket(port, addr);
+                serverSock.setReuseAddress(true);
+                serverSock.setReceiveBufferSize(BUFFER_SIZE);
+                serverSock.setSendBufferSize(BUFFER_SIZE);
+                serverSock.setSoTimeout(0);
             }
             catch (Exception e) {
-                Log.e(TAG, "Failed to decompress message.", e);
-                continue;
+                Log.e(TAG, "Failed to create server socket.", e);
+                return null;
             }
-            progress.success = handle(progress.message);
 
-            publishProgress(progress);
+            Log.d(TAG, "Successfully created server UDP socket on port " + port);
+
+            byte[] buffer = new byte[BUFFER_SIZE];
+            DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+            while (!isCancelled() && Utils.hasNetworkConnection(mContext, ConnectivityManager.TYPE_WIFI)) {
+                try {
+                    serverSock.receive(packet);
+                }
+                catch (Exception e) {
+                    Log.e(TAG, "Failed to receive packet.", e);
+                    continue;
+                }
+
+                Log.d(TAG, "Receive message:\n" + Utils.dumpHex(buffer, 0, packet.getLength()));
+
+                String message;
+                try {
+                    message = Utils.decompress(buffer, 0, packet.getLength());
+                }
+                catch (Exception e) {
+                    Log.e(TAG, "Failed to decompress message.", e);
+                    continue;
+                }
+                Log.d(TAG, "Message content: " + message);
+                handle(message);
+            }
+            return null;
         }
-        return null;
-    }
 
-    private boolean handle(String msg) {
-        Log.d(TAG, "Got message " + msg);
+        private boolean handle(String msg) {
+            Log.d(TAG, "Got message " + msg);
 
-        JSONObject json = null;
-        
-        try {
-            json = new JSONObject(msg);
+            JSONObject json = null;
+
+            try {
+                json = new JSONObject(msg);
+            }
+            catch (Exception e) {
+                Log.e(TAG, "Failed to parse message: " + msg, e);
+            }
+            return false;
         }
-        catch (Exception e) {
-            Log.e(TAG, "Failed to parse message: " + msg, e);
-        }
-        return false;
-    }
-
-    public static class Params {
-        public int port;
-    }
-
-    public static class Progress {
-        public InetAddress sender;
-        public String message;
-        public boolean success;
-    }
-
-    public static class Result {
-        public boolean success;
-        public String reason;
     }
 }
 
 
+
+@Root(name = "ServerTask")
+class ServerTaskParameters extends PeriodicParameters {
+
+    @Element
+    public Integer serverPort;
+
+    public ServerTaskParameters() {
+        checkIntervalSec = 60L;
+        serverPort = 12345;
+    }
+
+    public ServerTaskParameters(ServerTaskParameters params) {
+        this.checkIntervalSec = params.checkIntervalSec;
+        this.serverPort = params.serverPort;
+    }
+
+}
+
+@Root(name = "ServerTask")
+class ServerTaskState extends PeriodicState {
+}

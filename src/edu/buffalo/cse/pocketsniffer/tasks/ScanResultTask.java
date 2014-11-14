@@ -12,6 +12,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.graphics.drawable.BitmapDrawable;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.net.wifi.ScanResult;
 import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiInfo;
@@ -34,11 +36,13 @@ public class ScanResultTask extends PeriodicTask<ScanResultTaskParameters, ScanR
 
     private Logger mLogger;
     private long mLastPrompt = 0L;
+    private ConnectivityManager mConnectivityManager;
 
     public ScanResultTask(Context context) {
         super(context, ScanResultTask.class.getSimpleName());
 
         mLogger = Logger.getInstance(mContext);
+        mConnectivityManager = (ConnectivityManager) mContext.getSystemService(Context.CONNECTIVITY_SERVICE);
     }
 
     /**
@@ -139,13 +143,14 @@ public class ScanResultTask extends PeriodicTask<ScanResultTaskParameters, ScanR
         }
         if (!found) {
             Log.d(TAG, "No PocketSniffer Wifi found.");
+            mNotificationManager.cancel(WIFI_NOTIFICATION_ID);
             return;
         }
 
         Notification.Builder builder = new Notification.Builder(mContext);
 
         builder.setSmallIcon(R.drawable.ic_launcher);
-        builder.setLargeIcon(((BitmapDrawable) mContext.getResources().getDrawable(R.drawable.ic_launcher)).getBitmap());
+        builder.setLargeIcon(((BitmapDrawable) mContext.getResources().getDrawable(R.drawable.wifi)).getBitmap());
         builder.setContentTitle("PocketSniffer");
         builder.setTicker("PocketSniffer Wifi available!");
         builder.setContentText("PocketSniffer Wifi found.");
@@ -153,12 +158,23 @@ public class ScanResultTask extends PeriodicTask<ScanResultTaskParameters, ScanR
         builder.setContentIntent(PendingIntent.getActivity(mContext, 0, new Intent(WifiManager.ACTION_PICK_WIFI_NETWORK), PendingIntent.FLAG_ONE_SHOT));
         builder.setAutoCancel(true);
         mNotificationManager.notify(WIFI_NOTIFICATION_ID, builder.build());
+        mLastPrompt = System.currentTimeMillis();
     }
 
     private void handleSupplicantState(Intent intent) {
     }
 
     public void handleRSSIChange(Intent intent) {
+    }
+
+    public void handleConnectivity(Intent intent) {
+        int type = intent.getIntExtra(ConnectivityManager.EXTRA_NETWORK_TYPE, -1);
+        if (type != ConnectivityManager.TYPE_WIFI) {
+            return;
+        }
+
+        NetworkInfo info = mConnectivityManager.getNetworkInfo(type);
+
     }
 
 
@@ -178,6 +194,9 @@ public class ScanResultTask extends PeriodicTask<ScanResultTaskParameters, ScanR
                 }
                 else if (WifiManager.RSSI_CHANGED_ACTION.equals(action)) {
                     handleRSSIChange(intent);
+                }
+                else if (ConnectivityManager.CONNECTIVITY_ACTION.equals(action)) {
+                    handleConnectivity(intent);
                 }
             }
             catch (Exception e) {
@@ -221,6 +240,7 @@ public class ScanResultTask extends PeriodicTask<ScanResultTaskParameters, ScanR
         wifiIntentFilter.addAction(WifiManager.RSSI_CHANGED_ACTION);
         wifiIntentFilter.addAction(WifiManager.WIFI_STATE_CHANGED_ACTION);
         wifiIntentFilter.addAction(WifiManager.SUPPLICANT_STATE_CHANGED_ACTION);
+        wifiIntentFilter.addAction(ConnectivityManager.CONNECTIVITY_ACTION);
         mContext.registerReceiver(mWifiReceiver, wifiIntentFilter);
     }
 
@@ -249,7 +269,7 @@ class ScanResultTaskParameters extends PeriodicParameters {
     public Integer promptIntervalSec;
 
     public ScanResultTaskParameters() {
-        targetSSID = "Pocketsniffer";
+        targetSSID = "PocketSniffer";
         preSharedKey = "LDR9OXnevs5lBlCjz0MNga2H40DlT2m0";
         minRSSI = -70;
         promptIntervalSec = 20;
