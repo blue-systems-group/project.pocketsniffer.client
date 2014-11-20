@@ -123,6 +123,10 @@ public class PingTask extends PeriodicTask<PingTaskParameters, PingTaskState> {
         return PingTaskParameters.class;
     }
 
+    @Override
+    public String getTag() {
+        return TAG;
+    }
 }
 
 @Root(name = "PingTask")

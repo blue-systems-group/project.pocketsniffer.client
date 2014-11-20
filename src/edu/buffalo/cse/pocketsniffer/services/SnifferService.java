@@ -25,6 +25,9 @@ public class SnifferService extends Service implements ManifestClient {
     private static final String DEFAULT_MANIFEST_URL = "http://pocketsniffer.cse.buffalo.edu/manifest/";
     private static final String DEFAULT_UPLOAD_URL = "http://pocketsniffer.cse.buffalo.edu/upload/";
 
+    private static final String MANIFEST_SERVICE_INTENT = "edu.buffalo.cse.pocketsniffer.services.ManifestService";
+    private static final String UPLOADER_SERVICE_INTENT = "edu.buffalo.cse.pocketsniffer.services.UploaderService";
+
     private boolean mStarted = false;
     private Context mContext;
 
@@ -46,12 +49,15 @@ public class SnifferService extends Service implements ManifestClient {
         super.onStartCommand(intent, flags, startId); 
         Log.v(TAG, "======== Starting PocketSniffer Service ======== ");
 
-        Intent manifestIntent = new Intent(mContext, ManifestService.class);
+        Intent manifestIntent = new Intent(MANIFEST_SERVICE_INTENT);
         manifestIntent.putExtra(ManifestService.EXTRA_MANIFEST_URL, DEFAULT_MANIFEST_URL);
+        manifestIntent.putExtra(ManifestService.EXTRA_TAG_PREFIX, "PocketSniffer");
+        manifestIntent.putExtra(ManifestService.EXTRA_INTENT_PREFIX, mContext.getPackageName());
         startService(manifestIntent);
 
-        Intent uploadIntent = new Intent(mContext, UploaderService.class);
+        Intent uploadIntent = new Intent(UPLOADER_SERVICE_INTENT);
         uploadIntent.putExtra(UploaderService.EXTRA_UPLOAD_URL, DEFAULT_UPLOAD_URL);
+        uploadIntent.putExtra(UploaderService.EXTRA_INTENT_PREFIX, mContext.getPackageName());
         startService(uploadIntent);
 
         mPingTask.start();

@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-adb shell am broadcast -a edu.buffalo.cse.phonelab.toolkit.android.tasks.UploaderTask.Check
+adb shell am broadcast -a edu.buffalo.cse.pocketsniffer.UploaderTask.Check

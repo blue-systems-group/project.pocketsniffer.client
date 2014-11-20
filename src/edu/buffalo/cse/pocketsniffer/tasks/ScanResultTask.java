@@ -268,6 +268,12 @@ public class ScanResultTask extends PeriodicTask<ScanResultTaskParameters, ScanR
         mContext.unregisterReceiver(mWifiReceiver);
     }
 
+
+    @Override
+    public String getTag() {
+        return TAG;
+    }
+
 }
 
 @Root(name = "ScanResultTask")

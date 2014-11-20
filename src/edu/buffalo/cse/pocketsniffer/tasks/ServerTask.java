@@ -193,6 +193,12 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
             return reply;
         }
     }
+
+    @Override
+    public String getTag() {
+        return TAG;
+    }
+
 }
 
 

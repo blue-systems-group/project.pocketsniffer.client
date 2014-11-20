@@ -130,6 +130,11 @@ public class ThroughputTask extends PeriodicTask<ThroughputTaskParameters, Throu
         return ThroughputTaskParameters.class;
     }
 
+    @Override
+    public String getTag() {
+        return TAG;
+    }
+
 }
 
 @Root(name = "ThroughputTask")

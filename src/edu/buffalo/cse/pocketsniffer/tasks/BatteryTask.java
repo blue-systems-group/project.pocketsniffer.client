@@ -68,6 +68,11 @@ public class BatteryTask extends PeriodicTask<BatteryTaskParameters, BatteryTask
         return super.getState();
     }
 
+    @Override
+    public String getTag() {
+        return TAG;
+    }
+
 }
 
 @Root(name="BatteryTask")
