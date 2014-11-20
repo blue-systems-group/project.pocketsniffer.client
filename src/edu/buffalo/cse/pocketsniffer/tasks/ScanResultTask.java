@@ -30,6 +30,7 @@ import edu.buffalo.cse.pocketsniffer.utils.Logger;
 
 public class ScanResultTask extends PeriodicTask<ScanResultTaskParameters, ScanResultTaskState>{
     private static final String TAG = LocalUtils.getTag(ScanResultTask.class);
+    private static final String ACTION_SCAN_RESULTS = ScanResultTask.class.getName() + ".ScanResults";
 
     private static final int WIFI_NOTIFICATION_ID = 34253;
 
@@ -86,6 +87,8 @@ public class ScanResultTask extends PeriodicTask<ScanResultTaskParameters, ScanR
         try {
             JSONObject json = new JSONObject();
             JSONArray array = new JSONArray();
+
+            json.put(Logger.KEY_ACTION, ACTION_SCAN_RESULTS);
 
             for (ScanResult result : mWifiManager.getScanResults()) {
                 JSONObject r = new JSONObject();
@@ -174,7 +177,21 @@ public class ScanResultTask extends PeriodicTask<ScanResultTaskParameters, ScanR
         }
 
         NetworkInfo info = mConnectivityManager.getNetworkInfo(type);
+    }
 
+    public static JSONObject getDetailedScanResult() {
+        JSONObject json = new JSONObject();
+
+        try {
+            json.put("timestamp", System.currentTimeMillis());
+            json.put("mac", LocalUtils.getMacAddress("wlan0"));
+            json.put("output", Utils.call("iw wlan0 scan", -1 /* no timeout */, true /* require su */)[1]);
+        }
+        catch (Exception e) {
+            // ignore
+        }
+
+        return json;
     }
 
 

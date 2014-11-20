@@ -3,6 +3,8 @@ package edu.buffalo.cse.pocketsniffer.interfaces;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.json.JSONObject;
+
 import android.text.TextUtils;
 
 /**
@@ -41,5 +43,33 @@ public class TrafficFlow {
 
     public String getKey() {
         return TrafficFlow.getKey(this.from, this.to);
+    }
+
+    public static String getDirectionString(int direction) {
+        switch(direction) {
+            case DIRECTION_DOWNLINK:
+                return "downlink";
+            case DIRECTION_UPLINK:
+                return "uplink";
+            default:
+                return "unknown";
+        }
+    }
+
+    public JSONObject toJSONObject() {
+        JSONObject json = new JSONObject();
+
+        try {
+            json.put("from", from);
+            json.put("to", to);
+            json.put("totalBytes", totalBytes());
+            json.put("direction", TrafficFlow.getDirectionString(direction));
+            json.put("startMs", startMs);
+            json.put("endMs", endMs);
+        }
+        catch (Exception e) {
+            // ignore
+        }
+        return json;
     }
 }

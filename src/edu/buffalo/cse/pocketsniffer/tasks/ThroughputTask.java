@@ -21,22 +21,28 @@ import edu.buffalo.cse.phonelab.toolkit.android.periodictask.PeriodicState;
 import edu.buffalo.cse.phonelab.toolkit.android.periodictask.PeriodicTask;
 import edu.buffalo.cse.phonelab.toolkit.android.utils.Utils;
 import edu.buffalo.cse.pocketsniffer.utils.LocalUtils;
+import edu.buffalo.cse.pocketsniffer.utils.Logger;
 
 
 public class ThroughputTask extends PeriodicTask<ThroughputTaskParameters, ThroughputTaskState> {
     private static final String TAG = LocalUtils.getTag(ThroughputTask.class);
+    private static final String ACTION = ThroughputTask.class.getName() + ".Throughput";
 
     private static final int BUFFER_SIZE = 4096;
+    
+    private Logger mLogger;
 
     public ThroughputTask(Context context) {
         super(context, ThroughputTask.class.getSimpleName());
+
+        mLogger = Logger.getInstance(mContext);
     }
 
     private JSONObject download(String url) {
         JSONObject result = new JSONObject();
 
         try {
-            result.put("Url", url);
+            result.put("URL", url);
         }
         catch (Exception e) {
             // ignore
@@ -66,7 +72,7 @@ public class ThroughputTask extends PeriodicTask<ThroughputTaskParameters, Throu
         catch (Exception e) {
             Log.e(TAG, "Failed to download from " + url, e);
             try {
-                result.put("Success", false);
+                result.put("success", false);
             }
             catch (Exception ex) {
                 // ignore
@@ -75,10 +81,10 @@ public class ThroughputTask extends PeriodicTask<ThroughputTaskParameters, Throu
         }
 
         try {
-            result.put("Success", true);
-            result.put("FileSize", totalSize);
-            result.put("DurationSec", (end-start)/1000);
-            result.put("ThroughputMBps", Double.valueOf(String.format("%.2f", (double)totalSize/1024/1024/(end-start)*1000)));
+            result.put("success", true);
+            result.put("fileSize", totalSize);
+            result.put("durationSec", (end-start)/1000);
+            result.put("throughputMBps", Double.valueOf(String.format("%.2f", (double)totalSize/1024/1024/(end-start)*1000)));
         }
         catch (Exception e) {
             // ignore
@@ -91,16 +97,17 @@ public class ThroughputTask extends PeriodicTask<ThroughputTaskParameters, Throu
     protected void check(ThroughputTaskParameters parameters) throws Exception {
         JSONObject json = new JSONObject();
         JSONArray results = new JSONArray();
-        json.put("timestamp", System.currentTimeMillis());
-        json.put("Date", Utils.getDateTimeString());
+
+        json.put(Logger.KEY_ACTION, ACTION);
 
         for (String url: parameters.urls) {
             Log.d(TAG, "Try downloading " + url);
             results.put(download(url));
         }
-        json.put("Results", results);
+        json.put("results", results);
 
         Log.d(TAG, json.toString());
+        mLogger.log(json);
     }
 
     @Override

@@ -3,6 +3,8 @@ package edu.buffalo.cse.pocketsniffer.interfaces;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.json.JSONObject;
+
 import android.net.wifi.ScanResult;
 
 import edu.buffalo.cse.phonelab.toolkit.android.utils.Utils;
@@ -65,5 +67,22 @@ public class Station {
 
     public static String getKey(String mac) {
         return mac.toUpperCase();
+    }
+
+    public JSONObject toJSONObject() {
+        JSONObject json = new JSONObject();
+
+        try {
+            json.put("mac", mac);
+            json.put("isAP", isAP);
+            json.put("SSID", SSID);
+            json.put("freq", freq);
+            json.put("avgRSSI", getAvgRSSI());
+        }
+        catch (Exception e) {
+            // ignore
+        }
+
+        return json;
     }
 }

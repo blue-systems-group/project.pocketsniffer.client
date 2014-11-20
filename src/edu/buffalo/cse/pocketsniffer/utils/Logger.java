@@ -17,6 +17,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.os.Build;
 import android.os.IBinder;
 import android.util.Log;
 
@@ -33,8 +34,8 @@ public class Logger implements UploaderClient {
 
     private static final String TAG = LocalUtils.getTag(Logger.class);
     private static final int FLUSH_LINES = 1;
-    private static final int RORATE_LINES = 1024;
-    private static final String DEFAULT_UPLOAD_URL = "";
+    private static final int RORATE_LINES = 10;
+    private static final String DEFAULT_UPLOAD_URL = "http://pocketsniffer.cse.buffalo.edu/upload/";
 
     private static Logger mInstance;
     private File mFileDir;
@@ -54,6 +55,8 @@ public class Logger implements UploaderClient {
             mUploaderService = binder.getService();
             mUploaderService.registerLogger(Logger.this, UploaderService.PRIORITY_HIGH);
             Log.d(TAG, "Connected to uploader service.");
+            // upload is paused by default
+            mUploaderService.resumeUpload();
         }
 
         @Override
@@ -121,10 +124,13 @@ public class Logger implements UploaderClient {
             Log.w(TAG, "No action specified.");
         }
 
+        long now = System.currentTimeMillis();
+
         try {
-            json.put("timestamp", Utils.getDateTimeString());
+            json.put("timestamp", now);
+            json.put("date", Utils.getDateTimeString(now));
             json.put("format", LOGGER_FORMAT);
-            json.put("deviceType", "Android");
+            json.put("deviceModel", Build.MODEL);
             json.put("deviceID", Utils.getDeviceID(mContext));
         }
         catch (Exception e) {

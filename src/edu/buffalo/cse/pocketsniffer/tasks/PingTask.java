@@ -17,12 +17,18 @@ import edu.buffalo.cse.phonelab.toolkit.android.periodictask.PeriodicState;
 import edu.buffalo.cse.phonelab.toolkit.android.periodictask.PeriodicTask;
 import edu.buffalo.cse.phonelab.toolkit.android.utils.Utils;
 import edu.buffalo.cse.pocketsniffer.utils.LocalUtils;
+import edu.buffalo.cse.pocketsniffer.utils.Logger;
 
 public class PingTask extends PeriodicTask<PingTaskParameters, PingTaskState> {
     private static final String TAG = LocalUtils.getTag(PingTask.class);
+    private static final String ACTION = PingTask.class.getName() + ".PingResult";
+
+    private Logger mLogger;
 
     public PingTask(Context context) {
         super(context, PingTask.class.getSimpleName());
+
+        mLogger = Logger.getInstance(mContext);
     }
 
     private JSONObject parstPingOutput(String output) {
@@ -36,7 +42,7 @@ public class PingTask extends PeriodicTask<PingTaskParameters, PingTaskState> {
             try {
                 if (line.startsWith("PING")) {
                     String[] parts = line.split(" ");
-                    json.put("Host", parts[1]);
+                    json.put("host", parts[1]);
                     json.put("IP", parts[2].substring(1,parts[2].length()));
                 }
                 else if (line.startsWith("64 bytes")) {
@@ -47,15 +53,15 @@ public class PingTask extends PeriodicTask<PingTaskParameters, PingTaskState> {
                 }
                 else if (line.matches("^\\d*\\spackets transmitted.*$")) {
                     String[] parts = line.split(" ");
-                    json.put("PacketTransmitted", Integer.parseInt(parts[0]));
-                    json.put("PacketReceived", Integer.parseInt(parts[3]));
+                    json.put("packetTransmitted", Integer.parseInt(parts[0]));
+                    json.put("packetReceived", Integer.parseInt(parts[3]));
                 }
                 else if (line.startsWith("rtt")) {
                     String[] parts = line.split(" ")[3].split("/");
-                    json.put("Min", Double.parseDouble(parts[0]));
-                    json.put("Avg", Double.parseDouble(parts[1]));
-                    json.put("Max", Double.parseDouble(parts[2]));
-                    json.put("Mdev", Double.parseDouble(parts[3]));
+                    json.put("min", Double.parseDouble(parts[0]));
+                    json.put("avg", Double.parseDouble(parts[1]));
+                    json.put("max", Double.parseDouble(parts[2]));
+                    json.put("mdev", Double.parseDouble(parts[3]));
                 }
             }
             catch (Exception e) {
@@ -76,12 +82,11 @@ public class PingTask extends PeriodicTask<PingTaskParameters, PingTaskState> {
         JSONObject json = new JSONObject();
         JSONArray results = new JSONArray();
 
-        json.put("timestamp", System.currentTimeMillis());
-        json.put("Date", Utils.getDateTimeString());
+        json.put(Logger.KEY_ACTION, ACTION);
 
         for (String host : parameters.hosts) {
             JSONObject entry = new JSONObject();
-            entry.put("Host", host);
+            entry.put("host", host);
             List<String> cmd = new ArrayList<String>();
             cmd.add("ping");
             cmd.add("-c");
@@ -91,9 +96,11 @@ public class PingTask extends PeriodicTask<PingTaskParameters, PingTaskState> {
             String output = (String) Utils.call(cmd, -1 /* no timeout*/, false /* do not require su */)[1];
             results.put(parstPingOutput(output));
         }
-        json.put("Results", results);
+        json.put("results", results);
 
         Log.d(TAG, json.toString());
+
+        mLogger.log(json);
     }
 
     @Override

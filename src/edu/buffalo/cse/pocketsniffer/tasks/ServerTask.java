@@ -3,7 +3,9 @@ package edu.buffalo.cse.pocketsniffer.tasks;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
+import java.nio.charset.Charset;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 import org.simpleframework.xml.Element;
 import org.simpleframework.xml.Root;
@@ -30,7 +32,7 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
     }
 
     public void startServerTask() {
-        if (mServerTask == null) {
+        if (mServerTask == null || mServerTask.getStatus() == AsyncTask.Status.FINISHED) {
             mServerTask = new ActualServerTask(mParameters.serverPort);
         }
 
@@ -121,45 +123,74 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
 
             Log.d(TAG, "Successfully created server UDP socket on port " + port);
 
-            byte[] buffer = new byte[BUFFER_SIZE];
-            DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+            DatagramPacket receivedPacket = new DatagramPacket(new byte[BUFFER_SIZE], BUFFER_SIZE);
+
             while (!isCancelled() && Utils.hasNetworkConnection(mContext, ConnectivityManager.TYPE_WIFI)) {
                 try {
-                    serverSock.receive(packet);
+                    serverSock.receive(receivedPacket);
                 }
                 catch (Exception e) {
-                    Log.e(TAG, "Failed to receive packet.", e);
+                    Log.e(TAG, "Failed to receive receivedPacket.", e);
                     continue;
                 }
 
-                Log.d(TAG, "Receive message:\n" + Utils.dumpHex(buffer, 0, packet.getLength()));
-
-                String message;
+                JSONObject reply = null;
                 try {
-                    message = Utils.decompress(buffer, 0, packet.getLength());
+                    reply = handle(new JSONObject(Utils.decompress(receivedPacket.getData(), 0, receivedPacket.getLength())));
                 }
                 catch (Exception e) {
-                    Log.e(TAG, "Failed to decompress message.", e);
+                    Log.e(TAG, "Failed to handle message.", e);
                     continue;
                 }
-                Log.d(TAG, "Message content: " + message);
-                handle(message);
+                if (reply != null) {
+                    byte[] data = reply.toString().getBytes(Charset.forName("UTF-8"));
+                    try {
+                        (new DatagramSocket(receivedPacket.getPort(), receivedPacket.getAddress())).send(new DatagramPacket(data, data.length));
+                    }
+                    catch (Exception e) {
+                        Log.e(TAG, "Failed to send message to " + receivedPacket.getAddress() + " at port " + receivedPacket.getPort(), e);
+                    }
+                }
             }
             return null;
         }
 
-        private boolean handle(String msg) {
-            Log.d(TAG, "Got message " + msg);
+        private JSONObject handle(JSONObject msg) {
+            Log.d(TAG, "Got message " + msg.toString());
 
-            JSONObject json = null;
+            JSONObject reply = new JSONObject();
 
             try {
-                json = new JSONObject(msg);
+                reply.put("mac", LocalUtils.getMacAddress("wlan0"));
+
+                if (msg.getBoolean("collectScanResult")) {
+                    Log.d(TAG, "Collecting detailed scan result.");
+                    reply.put("scanResult", ScanResultTask.getDetailedScanResult());
+                }
+
+                if (msg.getBoolean("collectTraffic")) {
+                    Log.d(TAG, "Collecting traffic condition.");
+
+                    SnifTask.Params params = new SnifTask.Params();
+                    JSONArray channels = msg.getJSONArray("channels");
+                    for (int i = 0; i < channels.length(); i++) {
+                        params.channels.add(channels.getInt(i));
+                    }
+                    params.durationSec = msg.optInt("durationSec", 30);
+                    params.packetCount = -1;
+                    params.forever = false;
+
+                    SnifTask task = new SnifTask(mContext, null);
+                    task.execute(params);
+
+                    reply.put("traffic", task.get().toJSONObject());
+                }
             }
             catch (Exception e) {
-                Log.e(TAG, "Failed to parse message: " + msg, e);
+                return null;
             }
-            return false;
+
+            return reply;
         }
     }
 }

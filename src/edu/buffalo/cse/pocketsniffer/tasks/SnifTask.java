@@ -7,7 +7,9 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import android.content.Context;
@@ -23,12 +25,16 @@ import edu.buffalo.cse.pocketsniffer.interfaces.Packet;
 import edu.buffalo.cse.pocketsniffer.interfaces.Station;
 import edu.buffalo.cse.pocketsniffer.interfaces.Task;
 import edu.buffalo.cse.pocketsniffer.interfaces.TrafficFlow;
+import edu.buffalo.cse.pocketsniffer.utils.LocalUtils;
 
 public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.Result> {
 
     static {
         System.loadLibrary("pcap");
     }
+
+    private static final String TAG = LocalUtils.getTag(SnifTask.class);
+    private static final String ACTION = SnifTask.class.getName() + ".SnifDone";
 
     private final static String WLAN_IFACE = "wlan0";
     private final static String MONITOR_IFACE = "mon.wlan0";
@@ -300,6 +306,7 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
             Utils.ifaceUp(WLAN_IFACE, false);
         }
         catch (Exception e) {
+            // ignore
         }
         mWifiManager.reconnect();
         result.updated = System.currentTimeMillis();
@@ -376,10 +383,40 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
             ignoredPackets = 0;
             updated = 0L;
         }
+
+        public JSONObject toJSONObject() {
+            JSONObject json = new JSONObject();
+
+            try {
+                JSONObject channelTrafficJSON = new JSONObject();
+                for (Entry<Integer, Collection<TrafficFlow>> entry : channelTraffic.entrySet()) {
+                    JSONArray array = new JSONArray();
+                    for(TrafficFlow flow : entry.getValue()) {
+                        array.put(flow.toJSONObject());
+                    }
+                    channelTrafficJSON.put(entry.getKey().toString(), array);
+                }
+                json.put("channelTraffic", channelTrafficJSON);
+
+                JSONObject channelStationJSON = new JSONObject();
+                for (Entry<Integer, Collection<Station>> entry : channelStation.entrySet()) {
+                    JSONArray array = new JSONArray();
+                    for (Station station : entry.getValue()) {
+                        array.put(station.toJSONObject());
+                    }
+                    channelStationJSON.put(entry.getKey().toString(), array);
+                }
+                json.put("channelStation", channelStationJSON);
+                
+                json.put("totalPackets", totalPackets);
+                json.put("corruptedPackets", corruptedPackets);
+                json.put("ignoredPackets", ignoredPackets);
+            }
+            catch (Exception e) {
+                // ignore
+            }
+
+            return json;
+        }
     }
 }
-
-
-
-
-
