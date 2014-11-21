@@ -79,10 +79,10 @@ public class APFragment extends Fragment implements Refreshable {
 
             @Override
             public int compare(ScanResult lhs, ScanResult rhs) {
-                if (lhs.frequency != rhs.frequency) {
-                    return new Integer(lhs.frequency).compareTo(rhs.frequency);
+                if (!lhs.SSID.equals(rhs.SSID)) {
+                    return lhs.SSID.toLowerCase().compareTo(rhs.SSID.toLowerCase());
                 }
-                return lhs.SSID.compareTo(rhs.SSID);
+                return lhs.BSSID.compareTo(rhs.BSSID);
             }
         });
         mAdapter.notifyDataSetChanged();
@@ -175,8 +175,7 @@ public class APFragment extends Fragment implements Refreshable {
         }
 
         @Override
-        public void onItemClick(AdapterView<?> parent, View view, int position,
-                long id) {
+        public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
         }
     }
 }
