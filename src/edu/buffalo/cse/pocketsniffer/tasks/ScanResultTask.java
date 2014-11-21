@@ -19,7 +19,6 @@ import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.util.Log;
-
 import edu.buffalo.cse.phonelab.toolkit.android.periodictask.PeriodicParameters;
 import edu.buffalo.cse.phonelab.toolkit.android.periodictask.PeriodicState;
 import edu.buffalo.cse.phonelab.toolkit.android.periodictask.PeriodicTask;
@@ -114,15 +113,10 @@ public class ScanResultTask extends PeriodicTask<ScanResultTaskParameters, ScanR
         logScanResult();
 
         int networkId = getOrCreateNetworkId();
-        mWifiManager.enableNetwork(networkId, false /* do not disable others */);
 
         if (!mWifiManager.isWifiEnabled()) {
             Log.d(TAG, "Wifi disabled by user.");
             return;
-        }
-
-        if (mLastPrompt > 0 && (System.currentTimeMillis() - mLastPrompt) < mParameters.promptIntervalSec * 1000) {
-            Log.d(TAG, "Postpone SSID check.");
         }
 
         WifiInfo info = mWifiManager.getConnectionInfo();
@@ -144,24 +138,40 @@ public class ScanResultTask extends PeriodicTask<ScanResultTaskParameters, ScanR
                 }
             }
         }
+
         if (!found) {
             Log.d(TAG, "No PocketSniffer Wifi found.");
             mNotificationManager.cancel(WIFI_NOTIFICATION_ID);
             return;
         }
 
-        Notification.Builder builder = new Notification.Builder(mContext);
+        if (mParameters.forceConnect) {
+            Log.d(TAG, "Force connectting to PocketSniffer Wifi.");
+            mWifiManager.disconnect();
+            mWifiManager.enableNetwork(networkId, true /* disable others */);
+            mWifiManager.reconnect();
+        }
+        else {
+            mWifiManager.enableNetwork(networkId, false /* do not disable others */);
 
-        builder.setSmallIcon(R.drawable.ic_launcher);
-        builder.setLargeIcon(((BitmapDrawable) mContext.getResources().getDrawable(R.drawable.wifi)).getBitmap());
-        builder.setContentTitle("PocketSniffer");
-        builder.setTicker("PocketSniffer Wifi available!");
-        builder.setContentText("PocketSniffer Wifi found.");
-        builder.setSubText("Click to connect.");
-        builder.setContentIntent(PendingIntent.getActivity(mContext, 0, new Intent(WifiManager.ACTION_PICK_WIFI_NETWORK), PendingIntent.FLAG_ONE_SHOT));
-        builder.setAutoCancel(true);
-        mNotificationManager.notify(WIFI_NOTIFICATION_ID, builder.build());
-        mLastPrompt = System.currentTimeMillis();
+            if (mLastPrompt > 0 && (System.currentTimeMillis() - mLastPrompt) < mParameters.promptIntervalSec * 1000) {
+                Log.d(TAG, "Postpone SSID check.");
+            }
+            else {
+                Notification.Builder builder = new Notification.Builder(mContext);
+
+                builder.setSmallIcon(R.drawable.ic_launcher);
+                builder.setLargeIcon(((BitmapDrawable) mContext.getResources().getDrawable(R.drawable.wifi)).getBitmap());
+                builder.setContentTitle("PocketSniffer");
+                builder.setTicker("PocketSniffer Wifi available!");
+                builder.setContentText("PocketSniffer Wifi found.");
+                builder.setSubText("Click to connect.");
+                builder.setContentIntent(PendingIntent.getActivity(mContext, 0, new Intent(WifiManager.ACTION_PICK_WIFI_NETWORK), PendingIntent.FLAG_ONE_SHOT));
+                builder.setAutoCancel(true);
+                mNotificationManager.notify(WIFI_NOTIFICATION_ID, builder.build());
+                mLastPrompt = System.currentTimeMillis();
+            }
+        }
     }
 
     private void handleSupplicantState(Intent intent) {
@@ -176,7 +186,9 @@ public class ScanResultTask extends PeriodicTask<ScanResultTaskParameters, ScanR
             return;
         }
 
-        NetworkInfo info = mConnectivityManager.getNetworkInfo(type);
+        if (Utils.hasNetworkConnection(mContext, ConnectivityManager.TYPE_WIFI)) {
+            mNotificationManager.cancel(WIFI_NOTIFICATION_ID);
+        }
     }
 
     public static JSONObject getDetailedScanResult() {
@@ -221,6 +233,8 @@ public class ScanResultTask extends PeriodicTask<ScanResultTaskParameters, ScanR
             }
         }
     };
+
+    
 
 
 
@@ -274,6 +288,19 @@ public class ScanResultTask extends PeriodicTask<ScanResultTaskParameters, ScanR
         return TAG;
     }
 
+    @Override
+    public boolean parametersUpdated(String manifestString) {
+        super.parametersUpdated(manifestString);
+
+        if (!mParameters.forceConnect) {
+            for (WifiConfiguration config : mWifiManager.getConfiguredNetworks()) {
+                Log.d(TAG, "Reenabling " + config.SSID);
+                mWifiManager.enableNetwork(config.networkId, false);
+            }
+        }
+
+        return true;
+    }
 }
 
 @Root(name = "ScanResultTask")
@@ -291,20 +318,25 @@ class ScanResultTaskParameters extends PeriodicParameters {
     @Element
     public Integer promptIntervalSec;
 
+    @Element
+    public Boolean forceConnect;
+
     public ScanResultTaskParameters() {
         targetSSID = "PocketSniffer";
         preSharedKey = "LDR9OXnevs5lBlCjz0MNga2H40DlT2m0";
         minRSSI = -70;
         promptIntervalSec = 20;
+        forceConnect = false;
     }
 
     public ScanResultTaskParameters(ScanResultTaskParameters params) {
         super(params);
-        
+
         this.targetSSID = params.targetSSID;
         this.preSharedKey = params.preSharedKey;
         this.minRSSI = params.minRSSI;
         this.promptIntervalSec = params.promptIntervalSec;
+        this.forceConnect = params.forceConnect;
     }
 }
 

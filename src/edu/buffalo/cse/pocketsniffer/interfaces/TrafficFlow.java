@@ -60,8 +60,8 @@ public class TrafficFlow {
         JSONObject json = new JSONObject();
 
         try {
-            json.put("from", from);
-            json.put("to", to);
+            json.put("from", from.toJSONObject());
+            json.put("to", to.toJSONObject());
             json.put("totalBytes", totalBytes());
             json.put("direction", TrafficFlow.getDirectionString(direction));
             json.put("startMs", startMs);

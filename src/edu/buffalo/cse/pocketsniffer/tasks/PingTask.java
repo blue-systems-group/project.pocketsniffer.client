@@ -79,6 +79,12 @@ public class PingTask extends PeriodicTask<PingTaskParameters, PingTaskState> {
 
     @Override
     protected void check(PingTaskParameters parameters) throws Exception {
+
+        if (!Utils.hasNetworkConnection(mContext)) {
+            Log.w(TAG, "No network connection. Do not ping.");
+            return;
+        }
+
         JSONObject json = new JSONObject();
         JSONArray results = new JSONArray();
 
@@ -143,12 +149,6 @@ class PingTaskParameters extends PeriodicParameters {
         checkIntervalSec = 300L;
         hosts = new ArrayList<String>();
         packetNum = 10;
-        hosts.add("192.168.1.1");
-        hosts.add("timberlake.cse.buffalo.edu");
-        hosts.add("buffalo.edu");
-        hosts.add("8.8.8.8");
-        hosts.add("8.8.4.4");
-        hosts.add("4.2.2.2");
     }
 
     public PingTaskParameters(PingTaskParameters parameters) {

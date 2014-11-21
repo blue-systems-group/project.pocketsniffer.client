@@ -95,6 +95,12 @@ public class ThroughputTask extends PeriodicTask<ThroughputTaskParameters, Throu
 
     @Override
     protected void check(ThroughputTaskParameters parameters) throws Exception {
+
+        if (!Utils.hasNetworkConnection(mContext)) {
+            Log.w(TAG, "No network connection. Do not download.");
+            return;
+        }
+
         JSONObject json = new JSONObject();
         JSONArray results = new JSONArray();
 
