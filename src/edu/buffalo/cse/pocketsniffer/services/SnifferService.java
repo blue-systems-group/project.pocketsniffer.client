@@ -22,11 +22,13 @@ import edu.buffalo.cse.pocketsniffer.utils.LocalUtils;
 public class SnifferService extends Service implements ManifestClient {
     private static final String TAG = LocalUtils.getTag(SnifferService.class);
 
-    private static final String DEFAULT_MANIFEST_URL = "http://pocketsniffer.cse.buffalo.edu/manifest/";
-    private static final String DEFAULT_UPLOAD_URL = "http://pocketsniffer.cse.buffalo.edu/upload/";
+    public static final String BASE_URL = "http://pocketsniffer.phone-lab.org";
 
-    private static final String MANIFEST_SERVICE_INTENT = "edu.buffalo.cse.pocketsniffer.services.ManifestService";
-    private static final String UPLOADER_SERVICE_INTENT = "edu.buffalo.cse.pocketsniffer.services.UploaderService";
+    public static final String DEFAULT_MANIFEST_URL = BASE_URL + "/manifest/";
+    public static final String DEFAULT_UPLOAD_URL = BASE_URL + "/upload/";
+
+    public static final String MANIFEST_SERVICE_INTENT = "edu.buffalo.cse.pocketsniffer.services.ManifestService";
+    public static final String UPLOADER_SERVICE_INTENT = "edu.buffalo.cse.pocketsniffer.services.UploaderService";
 
     private boolean mStarted = false;
     private Context mContext;

@@ -58,9 +58,6 @@ public class InfoFragment extends Fragment {
 
         List<SimpleEntry<String, String>> entries = new ArrayList<SimpleEntry<String, String>>();
 
-        entries.add(new SimpleEntry<String, String>(PLATFORM_VERISON, Build.DISPLAY));
-        entries.add(new SimpleEntry<String, String>(KERNEL_VERSION, System.getProperty("os.version")));
-        entries.add(new SimpleEntry<String, String>(MONITOR_MODE_SUPPORT, Utils.isPhoneLabDevice(mContext)? "Yes": "No"));
         try {
             entries.add(new SimpleEntry<String, String>(APP_VERSION, Utils.getVersionName(mContext) + " (" + Utils.getVersionCode(mContext) + ")"));
         }
@@ -68,6 +65,10 @@ public class InfoFragment extends Fragment {
             Log.e(TAG, "Failed to get application version info.", e);
             entries.add(new SimpleEntry<String, String>(APP_VERSION, UNKNOWN));
         }
+
+        entries.add(new SimpleEntry<String, String>(MONITOR_MODE_SUPPORT, Utils.isPhoneLabDevice(mContext)? "Yes": "No"));
+        entries.add(new SimpleEntry<String, String>(PLATFORM_VERISON, Build.DISPLAY));
+        entries.add(new SimpleEntry<String, String>(KERNEL_VERSION, System.getProperty("os.version")));
 
         mListTitle.clear();
         mListData.clear();

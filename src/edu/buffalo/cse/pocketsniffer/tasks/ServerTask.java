@@ -3,6 +3,7 @@ package edu.buffalo.cse.pocketsniffer.tasks;
 import java.io.BufferedOutputStream;
 import java.io.OutputStream;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.Charset;
@@ -35,13 +36,13 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
     }
 
     public void startServerTask() {
+        Log.d(TAG, "Starting server task.");
         if (mServerTask == null || mServerTask.getStatus() == AsyncTask.Status.FINISHED) {
             Log.d(TAG, "Creating server task.");
             mServerTask = new ActualServerTask(mParameters.serverPort);
         }
 
         if (mServerTask.getStatus() != AsyncTask.Status.RUNNING) {
-            Log.d(TAG, "Starting server task...");
             mServerTask.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
         }
         else {
@@ -50,6 +51,7 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
     }
 
     public void stopServerTask() {
+        Log.d(TAG, "Stopping server task.");
         if (mServerTask != null && mServerTask.getStatus() == AsyncTask.Status.RUNNING) {
             mServerTask.cancel(true);
         }
@@ -58,12 +60,14 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
 
     private boolean shouldServerRunning() {
         if (!Utils.hasNetworkConnection(mContext, ConnectivityManager.TYPE_WIFI)) {
+            Log.d(TAG, "No wifi connection, server should not run.");
             return false;
         }
         WifiInfo info = mWifiManager.getConnectionInfo();
-        if (info != null && Utils.stripQuotes(info.getSSID()) == mParameters.targetSSID) {
+        if (info != null && Utils.stripQuotes(info.getSSID()).equals(mParameters.targetSSID)) {
             return true;
         }
+        Log.d(TAG, "Not connected to PocketSniffer wifi, server should not run.");
         return false;
     }
 
@@ -260,9 +264,10 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
         protected Void doInBackground(String... params) {
             String msg = params[0];
 
-            Socket socket = null;
+            Socket socket = new Socket();
+            InetSocketAddress inetSocketAddress = new InetSocketAddress(addr, port);
             try {
-                socket = new Socket(addr, port);
+                socket.connect(inetSocketAddress, mParameters.connectionTimeoutSec * 1000);
                 Log.d(TAG, "Sending msg to " + addr);
                 OutputStream os = new BufferedOutputStream(socket.getOutputStream());
                 os.write(msg.getBytes(Charset.forName("utf-8")));
@@ -305,16 +310,21 @@ class ServerTaskParameters extends PeriodicParameters {
     @Element
     public String targetSSID;
 
+    @Element
+    public Integer connectionTimeoutSec;
+
     public ServerTaskParameters() {
         checkIntervalSec = 60L;
         serverPort = 6543;
         targetSSID = "PocketSniffer";
+        connectionTimeoutSec = 30;
     }
 
     public ServerTaskParameters(ServerTaskParameters params) {
         this.checkIntervalSec = params.checkIntervalSec;
         this.serverPort = params.serverPort;
         this.targetSSID = params.targetSSID;
+        this.connectionTimeoutSec = params.connectionTimeoutSec;
     }
 
 }

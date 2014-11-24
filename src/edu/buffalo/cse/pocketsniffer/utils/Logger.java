@@ -26,6 +26,7 @@ import edu.buffalo.cse.phonelab.toolkit.android.interfaces.UploaderFileDescripti
 import edu.buffalo.cse.phonelab.toolkit.android.services.UploaderService;
 import edu.buffalo.cse.phonelab.toolkit.android.services.UploaderService.LoggerBinder;
 import edu.buffalo.cse.phonelab.toolkit.android.utils.Utils;
+import edu.buffalo.cse.pocketsniffer.services.SnifferService;
 
 public class Logger implements UploaderClient {
     public static final String LOGGER_FORMAT = "1.0";
@@ -34,8 +35,7 @@ public class Logger implements UploaderClient {
 
     private static final String TAG = LocalUtils.getTag(Logger.class);
     private static final int FLUSH_LINES = 1;
-    private static final int RORATE_LINES = 10;
-    private static final String DEFAULT_UPLOAD_URL = "http://pocketsniffer.cse.buffalo.edu/upload/";
+    private static final int RORATE_LINES = 512;
 
     private static Logger mInstance;
     private File mFileDir;
@@ -102,7 +102,7 @@ public class Logger implements UploaderClient {
         mCurrentLine = 0;
 
         Intent intent = new Intent(mContext, UploaderService.class);
-        intent.putExtra(UploaderService.EXTRA_UPLOAD_URL, DEFAULT_UPLOAD_URL);
+        intent.putExtra(UploaderService.EXTRA_UPLOAD_URL, SnifferService.DEFAULT_UPLOAD_URL);
         mContext.bindService(intent, mUploaderServiceConnection, Context.BIND_AUTO_CREATE);
 
         mContext.sendBroadcast(new Intent(ACTION_LOG_FILE));

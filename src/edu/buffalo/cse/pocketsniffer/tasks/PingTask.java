@@ -33,23 +33,16 @@ public class PingTask extends PeriodicTask<PingTaskParameters, PingTaskState> {
 
     private JSONObject parstPingOutput(String output) {
         JSONObject json = new JSONObject();
-        JSONArray rtts = new JSONArray();
 
         for (String line : output.split("\n")) {
             line = line.trim();
             Log.d(TAG, "Parsing line: " + line);
 
             try {
-                if (line.startsWith("PING")) {
+                if (line.matches("^PING.*$")) {
                     String[] parts = line.split(" ");
                     json.put("host", parts[1]);
-                    json.put("IP", parts[2].substring(1,parts[2].length()));
-                }
-                else if (line.startsWith("64 bytes")) {
-                    String[] parts = line.split(" ");
-                    rtts.put(Double.parseDouble(parts[parts.length-2].substring(5)));
-                }
-                else if (line.startsWith("---")) {
+                    json.put("IP", parts[2].substring(1,parts[2].length()-1));
                 }
                 else if (line.matches("^\\d*\\spackets transmitted.*$")) {
                     String[] parts = line.split(" ");
@@ -67,12 +60,6 @@ public class PingTask extends PeriodicTask<PingTaskParameters, PingTaskState> {
             catch (Exception e) {
                 Log.e(TAG, "Failed to parse line: " + line, e);
             }
-        }
-        try {
-            json.put("RTT", rtts);
-        }
-        catch (Exception e) {
-            Log.e(TAG, "Failed to put rtt.");
         }
         return json;
     }
