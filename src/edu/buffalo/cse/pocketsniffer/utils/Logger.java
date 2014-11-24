@@ -102,7 +102,6 @@ public class Logger implements UploaderClient {
         mCurrentLine = 0;
 
         Intent intent = new Intent(mContext, UploaderService.class);
-        intent.putExtra(UploaderService.EXTRA_UPLOAD_URL, SnifferService.DEFAULT_UPLOAD_URL);
         mContext.bindService(intent, mUploaderServiceConnection, Context.BIND_AUTO_CREATE);
 
         mContext.sendBroadcast(new Intent(ACTION_LOG_FILE));

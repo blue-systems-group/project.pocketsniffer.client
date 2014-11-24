@@ -25,7 +25,6 @@ public class SnifferService extends Service implements ManifestClient {
     public static final String BASE_URL = "http://pocketsniffer.phone-lab.org";
 
     public static final String DEFAULT_MANIFEST_URL = BASE_URL + "/manifest/";
-    public static final String DEFAULT_UPLOAD_URL = BASE_URL + "/upload/";
 
     public static final String MANIFEST_SERVICE_INTENT = "edu.buffalo.cse.pocketsniffer.services.ManifestService";
     public static final String UPLOADER_SERVICE_INTENT = "edu.buffalo.cse.pocketsniffer.services.UploaderService";
@@ -58,7 +57,6 @@ public class SnifferService extends Service implements ManifestClient {
         startService(manifestIntent);
 
         Intent uploadIntent = new Intent(UPLOADER_SERVICE_INTENT);
-        uploadIntent.putExtra(UploaderService.EXTRA_UPLOAD_URL, DEFAULT_UPLOAD_URL);
         uploadIntent.putExtra(UploaderService.EXTRA_INTENT_PREFIX, mContext.getPackageName());
         startService(uploadIntent);
 
