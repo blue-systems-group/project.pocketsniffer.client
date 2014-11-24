@@ -53,7 +53,10 @@ public class ScanResultTask extends PeriodicTask<ScanResultTaskParameters, ScanR
      */
     private int getOrCreateNetworkId() {
         int networkId = -1;
+        int priority = -1;
         for (WifiConfiguration config : mWifiManager.getConfiguredNetworks()) {
+            priority = Math.max(priority, config.priority);
+
             if (mParameters.targetSSID.equals(Utils.stripQuotes(config.SSID))) {
                 if (networkId == -1) {
                     // reuse network id from previous configration.
@@ -71,6 +74,7 @@ public class ScanResultTask extends PeriodicTask<ScanResultTaskParameters, ScanR
         target.preSharedKey = Utils.addQuotes(mParameters.preSharedKey);
         target.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WPA_PSK, true);
         target.allowedAuthAlgorithms.set(WifiConfiguration.AuthAlgorithm.OPEN, true);
+        target.priority = priority+1;
 
         if (networkId == -1) {
             networkId = mWifiManager.addNetwork(target);
