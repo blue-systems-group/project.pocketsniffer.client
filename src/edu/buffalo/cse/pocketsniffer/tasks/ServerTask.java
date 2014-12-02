@@ -148,10 +148,10 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
                 return null;
             }
 
+            ServerSocket serverSock = null;
             while (!isCancelled() && shouldServerRunning()) {
                 // open a new server socket each time, since the current one
                 // may be broken when go to monitor mode
-                ServerSocket serverSock = null;
                 try {
                     serverSock = new ServerSocket(port);
                     serverSock.setReuseAddress(true);
@@ -159,6 +159,11 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
                 }
                 catch (Exception e) {
                     Log.e(TAG, "Failed to create server socket.", e);
+                    try{
+                        Thread.sleep(1000);
+                    }
+                    catch (Exception ex) {
+                    }
                     continue;
                 }
 
@@ -174,9 +179,24 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
                     continue;
                 }
 
+                try {
+                    serverSock.close();
+                }
+                catch (Exception e) {
+                    Log.e(TAG, "Failed to close server socket.", e);
+                }
+
+                InetAddress remoteAddr = connection.getInetAddress();
+
                 JSONObject reply = null;
                 try {
                     String message = Utils.readFull(connection.getInputStream());
+                    try {
+                        connection.close();
+                    }
+                    catch (Exception e) {
+                        Log.d(TAG, "Failed to close connection.", e);
+                    }
                     Log.d(TAG, "Got message: " + message);
                     reply = handle(new JSONObject(message));
                 }
@@ -185,19 +205,42 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
                     continue;
                 }
 
-                if (reply != null) {
-                    Log.d(TAG, "Sending reply: " + reply.toString());
-                    (new ClientTask(connection.getInetAddress(), mParameters.serverPort)).executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, reply.toString());
+
+                if (reply == null) {
+                    continue;
                 }
 
+                Socket sock = null;
                 try {
-                    serverSock.close();
+                    Log.d(TAG, "Sending reply: " + reply.toString());
+                    sock = new Socket(remoteAddr, mParameters.serverPort);
+                    OutputStream os = new BufferedOutputStream(sock.getOutputStream());
+                    os.write(reply.toString().getBytes(Charset.forName("utf-8")));
+                    os.flush();
+                    os.close();
                 }
                 catch (Exception e) {
-                    Log.e(TAG, "Failed to close server socket.", e);
+                    Log.e(TAG, "Failed to send msg.", e);
+                }
+                finally {
+                    try {
+                        if (sock != null) {
+                            sock.close();
+                        }
+                    }
+                    catch (Exception e) {
+                    }
                 }
             }
 
+            try {
+                if (serverSock != null) {
+                    serverSock.close();
+                }
+            }
+            catch (Exception e) {
+                Log.e(TAG, "Failed to close server socket.", e);
+            }
             return null;
         }
 
@@ -207,12 +250,12 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
             try {
                 reply.put("mac", LocalUtils.getMacAddress("wlan0"));
 
-                if (msg.getBoolean("collectScanResult")) {
+                if (msg.getBoolean("client_scan")) {
                     Log.d(TAG, "Collecting detailed scan result.");
                     reply.put("scanResult", ScanResultTask.getDetailedScanResult());
                 }
 
-                if (msg.getBoolean("collectTraffic")) {
+                if (msg.getBoolean("client_traffic")) {
                     Log.d(TAG, "Collecting traffic condition.");
 
                     SnifTask.Params params = new SnifTask.Params();
@@ -247,47 +290,6 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
             }
 
             return reply;
-        }
-    }
-
-    private class ClientTask extends AsyncTask<String, Void, Void> {
-
-        private InetAddress addr;
-        private int port;
-
-        public ClientTask(InetAddress addr, int port) {
-            this.addr = addr;
-            this.port = port;
-        }
-
-        @Override
-        protected Void doInBackground(String... params) {
-            String msg = params[0];
-
-            Socket socket = new Socket();
-            InetSocketAddress inetSocketAddress = new InetSocketAddress(addr, port);
-            try {
-                socket.connect(inetSocketAddress, mParameters.connectionTimeoutSec * 1000);
-                Log.d(TAG, "Sending msg to " + addr);
-                OutputStream os = new BufferedOutputStream(socket.getOutputStream());
-                os.write(msg.getBytes(Charset.forName("utf-8")));
-                os.flush();
-                os.close();
-            }
-            catch (Exception e) {
-                Log.e(TAG, "Failed to send msg.", e);
-            }
-            finally {
-                try {
-                    if (socket != null) {
-                        socket.close();
-                    }
-                }
-                catch (Exception e) {
-                    // ignore
-                }
-            }
-            return null;
         }
 
     }
