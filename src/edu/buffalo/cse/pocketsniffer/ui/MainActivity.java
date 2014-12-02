@@ -65,7 +65,6 @@ public class MainActivity extends Activity {
         mTabInfos = new ArrayList<TabInfo>();
         mTabInfos.add(new TabInfo("Info", InfoFragment.class));
         mTabInfos.add(new TabInfo("Access Points", APFragment.class));
-        mTabInfos.add(new TabInfo("Devices", DeviceFragment.class));
 
         mActionBar.setNavigationMode(ActionBar.NAVIGATION_MODE_TABS);
 
