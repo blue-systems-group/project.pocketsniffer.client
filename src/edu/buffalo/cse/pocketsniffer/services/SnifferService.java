@@ -1,7 +1,8 @@
 package edu.buffalo.cse.pocketsniffer.services;
 
-import org.simpleframework.xml.Element;
-import org.simpleframework.xml.Root;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Map.Entry;
 
 import android.app.Service;
 import android.content.Context;
@@ -9,17 +10,18 @@ import android.content.Intent;
 import android.os.IBinder;
 import android.util.Log;
 
-import edu.buffalo.cse.phonelab.toolkit.android.interfaces.ManifestClient;
+import edu.buffalo.cse.phonelab.toolkit.android.periodictask.PeriodicTask;
 import edu.buffalo.cse.phonelab.toolkit.android.services.ManifestService;
 import edu.buffalo.cse.phonelab.toolkit.android.services.UploaderService;
 import edu.buffalo.cse.pocketsniffer.tasks.BatteryTask;
+import edu.buffalo.cse.pocketsniffer.tasks.BuildInfoTask;
 import edu.buffalo.cse.pocketsniffer.tasks.PingTask;
 import edu.buffalo.cse.pocketsniffer.tasks.ScanResultTask;
 import edu.buffalo.cse.pocketsniffer.tasks.ServerTask;
 import edu.buffalo.cse.pocketsniffer.tasks.ThroughputTask;
 import edu.buffalo.cse.pocketsniffer.utils.LocalUtils;
 
-public class SnifferService extends Service implements ManifestClient {
+public class SnifferService extends Service {
     private static final String TAG = LocalUtils.getTag(SnifferService.class);
 
     public static final String BASE_URL = "http://pocketsniffer.phone-lab.org";
@@ -33,11 +35,21 @@ public class SnifferService extends Service implements ManifestClient {
     private Context mContext;
 
     // periodic tasks
+    private static final String[] TASK_NAMES = {
+        "edu.buffalo.cse.pocketsniffer.tasks.BatteryTask",
+        "edu.buffalo.cse.pocketsniffer.tasks.PingTask",
+        "edu.buffalo.cse.pocketsniffer.tasks.ThroughputTask",
+        "edu.buffalo.cse.pocketsniffer.tasks.ScanResultTask",
+        "edu.buffalo.cse.pocketsniffer.tasks.ServerTask",
+        "edu.buffalo.cse.pocketsniffer.tasks.BuildInfoTask",
+    };
+    private Map<String, PeriodicTask> mTasks;
     private BatteryTask mBatteryTask;
     private PingTask mPingTask;
     private ThroughputTask mThroughputTask;
     private ScanResultTask mScanResultTask;
     private ServerTask mServerTask;
+    private BuildInfoTask mBuildInfoTask;
 
 
     @Override
@@ -60,11 +72,10 @@ public class SnifferService extends Service implements ManifestClient {
         uploadIntent.putExtra(UploaderService.EXTRA_INTENT_PREFIX, mContext.getPackageName());
         startService(uploadIntent);
 
-        mPingTask.start();
-        mBatteryTask.start();
-        mThroughputTask.start();
-        mScanResultTask.start();
-        mServerTask.start();
+        for (Entry<String, PeriodicTask> entry : mTasks.entrySet()) {
+            Log.d(TAG, "Starting " + entry.getKey());
+            entry.getValue().start();
+        }
 
         mStarted = true;
         return START_STICKY;
@@ -76,12 +87,10 @@ public class SnifferService extends Service implements ManifestClient {
         super.onDestroy();
         Log.v(TAG, "======== Destroying PocketSniffer Service ========");
 
-        mPingTask.stop();
-        mBatteryTask.stop();
-        mThroughputTask.stop();
-        mScanResultTask.stop();
-        mServerTask.stop();
-
+        for (Entry<String, PeriodicTask> entry : mTasks.entrySet()) {
+            Log.d(TAG, "Stopping " + entry.getKey());
+            entry.getValue().stop();
+        }
     }
 
     @Override
@@ -92,48 +101,19 @@ public class SnifferService extends Service implements ManifestClient {
 
         mContext = this;
 
-        mServerTask = new ServerTask(mContext);
-        mBatteryTask = new BatteryTask(mContext);
-        mThroughputTask = new ThroughputTask(mContext);
-        mScanResultTask = new ScanResultTask(mContext);
-        mPingTask = new PingTask(mContext);
+        mTasks = new HashMap<String, PeriodicTask>();
+        for (String name : TASK_NAMES) {
+            try {
+                mTasks.put(name, (PeriodicTask) Class.forName(name).getConstructor(Context.class).newInstance(mContext));
+            }
+            catch (Exception e) {
+                Log.e(TAG, "Failed to create " + name, e);
+            }
+        }
     }
 
     @Override
     public IBinder onBind(Intent intent) {
         return null;
-    }
-
-    @Override
-    public String getState() {
-        return "";
-    }
-
-    @Override
-    public boolean parametersUpdated(String arg0) {
-        return false;
-    }
-}
-
-@Root(name="SnifferService", strict=false)
-class SnifferServiceParameters {
-
-    @Element(required=false)
-    public Integer listeningPort;
-
-    @Element(required=false)
-    public String ssid;
-
-    @Element(required=false)
-    public String key;
-
-    @Element(required=false)
-    public Integer minRSSI;
-
-    public SnifferServiceParameters() {
-        listeningPort = 8000;
-        ssid = "PocketSniffer";
-        key = "LDR9OXnevs5lBlCjz0MNga2H40DlT2m0";
-        minRSSI = -70;
     }
 }

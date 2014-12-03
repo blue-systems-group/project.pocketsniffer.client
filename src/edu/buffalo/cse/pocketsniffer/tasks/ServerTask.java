@@ -3,7 +3,6 @@ package edu.buffalo.cse.pocketsniffer.tasks;
 import java.io.BufferedOutputStream;
 import java.io.OutputStream;
 import java.net.InetAddress;
-import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.Charset;
@@ -15,6 +14,7 @@ import org.simpleframework.xml.Root;
 
 import android.content.Context;
 import android.net.ConnectivityManager;
+import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiInfo;
 import android.os.AsyncTask;
 import android.util.Log;
@@ -248,47 +248,54 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
             JSONObject reply = new JSONObject();
 
             try {
-                reply.put("mac", LocalUtils.getMacAddress("wlan0"));
-
-                if (msg.getBoolean("client_scan")) {
-                    Log.d(TAG, "Collecting detailed scan result.");
-                    reply.put("scanResult", ScanResultTask.getDetailedScanResult());
+                if (msg.has("action")) {
+                    Log.e(TAG, "No action specified. Ingoring.");
+                    reply = null;
                 }
+                else if ("collect".equals(msg.getString("action"))) {
+                    reply.put("mac", LocalUtils.getMacAddress("wlan0"));
 
-                if (msg.getBoolean("client_traffic")) {
-                    Log.d(TAG, "Collecting traffic condition.");
+                    if (msg.getBoolean("client_scan")) {
+                        Log.d(TAG, "Collecting detailed scan result.");
+                        reply.put("scanResult", ScanResultTask.getDetailedScanResult());
+                    }
 
-                    SnifTask.Params params = new SnifTask.Params();
-                    if (msg.has("channels")) {
-                        JSONArray channels = msg.getJSONArray("channels");
-                        for (int i = 0; i < channels.length(); i++) {
-                            params.channels.add(channels.getInt(i));
+                    if (msg.getBoolean("client_traffic")) {
+                        Log.d(TAG, "Collecting traffic condition.");
+
+                        SnifTask.Params params = new SnifTask.Params();
+                        if (msg.has("channels")) {
+                            JSONArray channels = msg.getJSONArray("channels");
+                            for (int i = 0; i < channels.length(); i++) {
+                                params.channels.add(channels.getInt(i));
+                            }
+                        }
+                        else {
+                            params.channels.add(1);
+                            params.channels.add(6);
+                            params.channels.add(11);
+                        }
+                        params.durationSec = msg.optInt("durationSec", 30);
+                        params.packetCount = -1;
+                        params.forever = false;
+
+                        SnifTask task = new SnifTask(mContext, null);
+                        task.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, params);
+
+                        reply.put("traffic", task.get().toJSONObject());
+
+                        Log.d(TAG, "Waiting for Wifi connection.");
+                        while (!Utils.hasNetworkConnection(mContext, ConnectivityManager.TYPE_WIFI)) {
+                            Thread.sleep(5);
                         }
                     }
-                    else {
-                        params.channels.add(1);
-                        params.channels.add(6);
-                        params.channels.add(11);
-                    }
-                    params.durationSec = msg.optInt("durationSec", 30);
-                    params.packetCount = -1;
-                    params.forever = false;
-
-                    SnifTask task = new SnifTask(mContext, null);
-                    task.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, params);
-
-                    reply.put("traffic", task.get().toJSONObject());
-
-                    Log.d(TAG, "Waiting for Wifi connection.");
-                    while (!Utils.hasNetworkConnection(mContext, ConnectivityManager.TYPE_WIFI)) {
-                        Thread.sleep(5);
-                    }
+                }
+                else if ("reassociate".equals(msg.getString("action"))) {
                 }
             }
             catch (Exception e) {
-                Log.e(TAG, "Failed to handle message.", e);
+                Log.e(TAG, "Failed to handle request.", e);
             }
-
             return reply;
         }
 
