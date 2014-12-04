@@ -26,6 +26,7 @@ public class BuildInfoTask extends PeriodicTask<BuildInfoParameters, BuildInfoSt
     public void check(BuildInfoParameters parameters) {
         BuildInfoState.setStatic(mContext);
         mState.uptime = SystemClock.elapsedRealtime();
+        mState.rooted = Utils.isRooted();
     }
 
     @Override
@@ -120,9 +121,14 @@ class BuildInfoState extends PeriodicState {
     @Element
     public Long uptime;
 
+    @Element
+    public Boolean rooted;
+
 
     public BuildInfoState() {
         super();
+        uptime = SystemClock.elapsedRealtime();
+        rooted = Utils.isRooted();
     }
 
 	public static void setStatic(Context context) {

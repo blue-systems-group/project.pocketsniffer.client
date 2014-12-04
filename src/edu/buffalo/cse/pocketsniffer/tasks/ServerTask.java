@@ -1,20 +1,22 @@
 package edu.buffalo.cse.pocketsniffer.tasks;
 
 import java.io.BufferedOutputStream;
+import java.io.File;
 import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.nio.charset.Charset;
 
 import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 import org.simpleframework.xml.Element;
 import org.simpleframework.xml.Root;
 
 import android.content.Context;
 import android.net.ConnectivityManager;
-import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiInfo;
 import android.os.AsyncTask;
 import android.util.Log;
@@ -29,33 +31,40 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
 
     private static final String TAG = LocalUtils.getTag(ServerTask.class);
 
-    private ActualServerTask mServerTask = null;
+    private ServerThread mServerThread = null;
+    private ServerSocket mServerSock;
 
     public ServerTask(Context context) {
         super(context, ServerTask.class.getSimpleName());
+
+        addAction(ConnectivityManager.CONNECTIVITY_ACTION);
     }
 
-    public void startServerTask() {
-        Log.d(TAG, "Starting server task.");
-        if (mServerTask == null || mServerTask.getStatus() == AsyncTask.Status.FINISHED) {
-            Log.d(TAG, "Creating server task.");
-            mServerTask = new ActualServerTask(mParameters.serverPort);
+    public void startServerThread() {
+        if (mServerThread == null || mServerThread.getState() == Thread.State.TERMINATED) {
+            Log.d(TAG, "Creating server thread.");
+            mServerThread = new ServerThread(mParameters.serverPort);
         }
 
-        if (mServerTask.getStatus() != AsyncTask.Status.RUNNING) {
-            mServerTask.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+        if (mServerThread.getState() == Thread.State.NEW) {
+            Log.d(TAG, "Starting server thread.");
+            mServerThread.start();
         }
         else {
-            Log.d(TAG, "Server task already running.");
+            Log.d(TAG, "Server thread already started.");
         }
     }
 
-    public void stopServerTask() {
-        Log.d(TAG, "Stopping server task.");
-        if (mServerTask != null && mServerTask.getStatus() == AsyncTask.Status.RUNNING) {
-            mServerTask.cancel(true);
+    public void stopServerThread() {
+        if (mServerThread != null) {
+            Log.d(TAG, "Stopping server thread.");
+            mServerThread.interrupt();
+            closeServerSocket();
+            mServerThread = null;
         }
-        mServerTask = null;
+        else {
+            Log.d(TAG, "Server thread already stopped.");
+        }
     }
 
     private boolean shouldServerRunning() {
@@ -63,6 +72,7 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
             Log.d(TAG, "No wifi connection, server should not run.");
             return false;
         }
+
         WifiInfo info = mWifiManager.getConnectionInfo();
         if (info != null && Utils.stripQuotes(info.getSSID()).equals(mParameters.targetSSID)) {
             return true;
@@ -73,12 +83,12 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
 
     @Override
     protected void check(ServerTaskParameters arg0) throws Exception {
-        // only run server task when connected to PocketSniffer wifi
+        // only run server thread when connected to PocketSniffer wifi
         if (shouldServerRunning()) {
-            startServerTask();
+            startServerThread();
         }
         else {
-            stopServerTask();
+            stopServerThread();
         }
     }
 
@@ -86,11 +96,11 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
     public boolean parametersUpdated(String manifestString) {
         super.parametersUpdated(manifestString);
 
-        if (mServerTask != null && mParameters.serverPort != mServerTask.port) {
-            Log.d(TAG, "Server port changed from " + mServerTask.port + " to " + mParameters.serverPort + ".");
-            Log.d(TAG, "Restarting server task...");
-            stopServerTask();
-            startServerTask();
+        if (mServerThread != null && mParameters.serverPort != mServerThread.port) {
+            Log.d(TAG, "Server port changed from " + mServerThread.port + " to " + mParameters.serverPort + ".");
+            Log.d(TAG, "Restarting server thread...");
+            stopServerThread();
+            startServerThread();
         }
 
         return true;
@@ -121,82 +131,55 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
     public synchronized void stop() {
         super.stop();
 
-        mServerTask.cancel(true);
+        stopServerThread();
     }
 
-    private class ActualServerTask extends AsyncTask<Void, Void, Void> {
-        private static final int BUFFER_SIZE = 1024*1024;
+    @Override
+    public synchronized void start() {
+        super.start();
 
-        public int port;
+        startServerThread();
+    }
 
-        public ActualServerTask(int port) {
+    private class ServerThread extends Thread {
+
+        private int port;
+
+        public ServerThread(int port) {
             this.port = port;
         }
 
-        @Override
-        protected Void doInBackground(Void... params) {
-            if (!shouldServerRunning()) {
-                return null;
-            }
-
-            InetAddress addr;
-            try {
-                addr = Utils.getIpAddress(mContext);
-            }
-            catch (Exception e) {
-                Log.e(TAG, "Failed to get IP address.", e);
-                return null;
-            }
-
-            ServerSocket serverSock = null;
-            while (!isCancelled() && shouldServerRunning()) {
+        public void run() {
+            while (shouldServerRunning()) {
                 // open a new server socket each time, since the current one
                 // may be broken when go to monitor mode
                 try {
-                    serverSock = new ServerSocket(port);
-                    serverSock.setReuseAddress(true);
-                    serverSock.setSoTimeout(0);
+                    mServerSock = new ServerSocket(port);
+                    mServerSock.setReuseAddress(true);
+                    mServerSock.setSoTimeout(0);
                 }
                 catch (Exception e) {
                     Log.e(TAG, "Failed to create server socket.", e);
-                    try{
-                        Thread.sleep(1000);
-                    }
-                    catch (Exception ex) {
-                    }
-                    continue;
+                    break;
                 }
-
-                Log.d(TAG, "Successfully created TCP socket listening port " + port);
+                Log.d(TAG, "Successfully created server socket on port " + port);
 
                 Socket connection = null;
                 try {
-                    Log.d(TAG, "Waiting for connection...");
-                    connection = serverSock.accept();
+                    connection = mServerSock.accept();
                 }
                 catch (Exception e) {
                     Log.e(TAG, "Failed to receive receivedPacket.", e);
-                    continue;
+                    break;
                 }
-
-                try {
-                    serverSock.close();
-                }
-                catch (Exception e) {
-                    Log.e(TAG, "Failed to close server socket.", e);
-                }
+                closeServerSocket();
 
                 InetAddress remoteAddr = connection.getInetAddress();
+                Log.d(TAG, "Get connection from " + remoteAddr);
 
                 JSONObject reply = null;
                 try {
                     String message = Utils.readFull(connection.getInputStream());
-                    try {
-                        connection.close();
-                    }
-                    catch (Exception e) {
-                        Log.d(TAG, "Failed to close connection.", e);
-                    }
                     Log.d(TAG, "Got message: " + message);
                     reply = handle(new JSONObject(message));
                 }
@@ -204,7 +187,14 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
                     Log.e(TAG, "Failed to handle message.", e);
                     continue;
                 }
-
+                finally {
+                    try {
+                        connection.close();
+                    }
+                    catch (Exception e) {
+                        // ignore
+                    }
+                }
 
                 if (reply == null) {
                     continue;
@@ -229,68 +219,94 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
                         }
                     }
                     catch (Exception e) {
+                        // ignore
                     }
                 }
             }
 
+            closeServerSocket();
+        }
+
+        private JSONObject getScanResult() {
+            JSONObject json = new JSONObject();
+
             try {
-                if (serverSock != null) {
-                    serverSock.close();
+                json.put("timestamp", System.currentTimeMillis());
+                if (new File("/system/bin/iw").exists()) {
+                    json.put("detailed", true);
+                    json.put("output", Utils.call("iw wlan0 scan", -1 /* no timeout */, true /* require su */)[1]);
+                }
+                else {
+                    json.put("detailed", false);
+                    json.put("results", Utils.getScanResults(mContext));
                 }
             }
             catch (Exception e) {
-                Log.e(TAG, "Failed to close server socket.", e);
+                // ignore
             }
-            return null;
+            return json;
         }
 
-        private JSONObject handle(JSONObject msg) {
+        private void handleCollect(JSONObject request, JSONObject reply) throws JSONException, Exception {
+            reply.put("mac", Utils.getMacAddress("wlan0"));
+
+            if (request.optBoolean("client_scan", false)) {
+                Log.d(TAG, "Collecting scan result.");
+                reply.put("scanResult", getScanResult());
+            }
+
+            if (request.optBoolean("client_traffic", false)) {
+                if (!Utils.isPhoneLabDevice(mContext)) {
+                    Log.w(TAG, "Not PhoneLab devices, ignoring traffic request.");
+                }
+                else {
+                    Log.d(TAG, "Collecting traffic condition.");
+
+                    SnifTask.Params params = new SnifTask.Params();
+                    if (request.has("channels")) {
+                        JSONArray channels = request.getJSONArray("channels");
+                        for (int i = 0; i < channels.length(); i++) {
+                            params.channels.add(channels.getInt(i));
+                        }
+                    }
+                    else {
+                        params.channels.add(1);
+                        params.channels.add(6);
+                        params.channels.add(11);
+                    }
+                    params.durationSec = request.optInt("durationSec", 30);
+                    params.packetCount = -1;
+                    params.forever = false;
+
+                    SnifTask task = new SnifTask(mContext, null);
+                    task.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, params);
+
+                    reply.put("traffic", task.get().toJSONObject());
+
+                    Log.d(TAG, "Waiting for Wifi connection.");
+                    while (!Utils.hasNetworkConnection(mContext, ConnectivityManager.TYPE_WIFI)) {
+                        Thread.sleep(5);
+                    }
+                }
+            }
+        }
+
+        private void handleExecute(JSONObject request, JSONObject reply) {
+        }
+
+        private JSONObject handle(JSONObject request) {
             JSONObject reply = new JSONObject();
 
             try {
-                if (msg.has("action")) {
+                if (request.has("action")) {
                     Log.e(TAG, "No action specified. Ingoring.");
                     reply = null;
                 }
-                else if ("collect".equals(msg.getString("action"))) {
-                    reply.put("mac", LocalUtils.getMacAddress("wlan0"));
-
-                    if (msg.getBoolean("client_scan")) {
-                        Log.d(TAG, "Collecting detailed scan result.");
-                        reply.put("scanResult", ScanResultTask.getDetailedScanResult());
-                    }
-
-                    if (msg.getBoolean("client_traffic")) {
-                        Log.d(TAG, "Collecting traffic condition.");
-
-                        SnifTask.Params params = new SnifTask.Params();
-                        if (msg.has("channels")) {
-                            JSONArray channels = msg.getJSONArray("channels");
-                            for (int i = 0; i < channels.length(); i++) {
-                                params.channels.add(channels.getInt(i));
-                            }
-                        }
-                        else {
-                            params.channels.add(1);
-                            params.channels.add(6);
-                            params.channels.add(11);
-                        }
-                        params.durationSec = msg.optInt("durationSec", 30);
-                        params.packetCount = -1;
-                        params.forever = false;
-
-                        SnifTask task = new SnifTask(mContext, null);
-                        task.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, params);
-
-                        reply.put("traffic", task.get().toJSONObject());
-
-                        Log.d(TAG, "Waiting for Wifi connection.");
-                        while (!Utils.hasNetworkConnection(mContext, ConnectivityManager.TYPE_WIFI)) {
-                            Thread.sleep(5);
-                        }
-                    }
+                else if ("collect".equals(request.getString("action"))) {
+                    handleCollect(request, reply);
                 }
-                else if ("reassociate".equals(msg.getString("action"))) {
+                else if ("execute".equals(request.getString("action"))) {
+                    handleExecute(request, reply);
                 }
             }
             catch (Exception e) {
@@ -300,6 +316,20 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
         }
 
     }
+
+    private void closeServerSocket() {
+        if (mServerSock != null) {
+            Log.d(TAG, "Closing server socket.");
+            try {
+                mServerSock.close();
+                mServerSock = null;
+            }
+            catch (Exception e) {
+                Log.e(TAG, "Failed to close server socket.", e);
+            }
+        }
+    }
+
 
     @Override
     public String getTag() {
