@@ -9,6 +9,7 @@
 #include "pcap_jni.h"
 #include "jni_utils.h"
 #include "crc.h"
+#include "coffeecatch.h"
 
 static custom_radiotap_header_t* parse_radiotap_header(const uint8_t* ptr);
 static dot11_header_t* parse_dot11_header(const uint8_t* ptr);
@@ -180,7 +181,12 @@ JNIEXPORT jboolean JNICALL Java_edu_buffalo_cse_pocketsniffer_tasks_SnifTask_par
         (*env)->SetIntField(env, packet, g_packet_fields[10].id, int_val);
 
         // crcOK
-        bool_val = (jboolean) check_crc(pkt, pkt_len);
+        COFFEE_TRY() {
+            bool_val = (jboolean) check_crc(pkt, pkt_len);
+        } COFFEE_CATCH() {
+            bool_val = false;
+            coffeecatch_cancel_pending_alarm();
+        } COFFEE_END();
         (*env)->SetBooleanField(env, packet, g_packet_fields[11].id, bool_val);
 
         // SSID
