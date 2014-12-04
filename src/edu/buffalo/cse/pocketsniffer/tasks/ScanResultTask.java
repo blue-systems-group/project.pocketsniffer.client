@@ -1,6 +1,5 @@
 package edu.buffalo.cse.pocketsniffer.tasks;
 
-import org.json.JSONArray;
 import org.json.JSONObject;
 import org.simpleframework.xml.Element;
 import org.simpleframework.xml.Root;
@@ -19,6 +18,7 @@ import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.util.Log;
+
 import edu.buffalo.cse.phonelab.toolkit.android.periodictask.PeriodicParameters;
 import edu.buffalo.cse.phonelab.toolkit.android.periodictask.PeriodicState;
 import edu.buffalo.cse.phonelab.toolkit.android.periodictask.PeriodicTask;
@@ -29,7 +29,6 @@ import edu.buffalo.cse.pocketsniffer.utils.Logger;
 
 public class ScanResultTask extends PeriodicTask<ScanResultTaskParameters, ScanResultTaskState>{
     private static final String TAG = LocalUtils.getTag(ScanResultTask.class);
-    private static final String ACTION_SCAN_RESULTS = ScanResultTask.class.getName() + ".ScanResults";
 
     private static final int WIFI_NOTIFICATION_ID = 34253;
 
@@ -89,22 +88,10 @@ public class ScanResultTask extends PeriodicTask<ScanResultTaskParameters, ScanR
     private void logScanResult() {
         try {
             JSONObject json = new JSONObject();
-            JSONArray array = new JSONArray();
-
-            json.put(Logger.KEY_ACTION, ACTION_SCAN_RESULTS);
-
-            for (ScanResult result : mWifiManager.getScanResults()) {
-                JSONObject r = new JSONObject();
-                r.put("SSID", result.SSID);
-                r.put("BSSID", result.BSSID);
-                r.put("capabilities", result.capabilities);
-                r.put("level", result.level);
-                r.put("frequency", result.frequency);
-                array.put(r);
-            }
             json.put(Logger.KEY_ACTION, WifiManager.SCAN_RESULTS_AVAILABLE_ACTION);
-            json.put("results", array);
+            json.put("results", Utils.getScanResults(mContext));
             mLogger.log(json);
+            Log.i(TAG, json.toString());
         }
         catch (Exception e) {
             Log.e(TAG, "Failed to log scan results.", e);
@@ -146,6 +133,13 @@ public class ScanResultTask extends PeriodicTask<ScanResultTaskParameters, ScanR
         if (!found) {
             Log.d(TAG, "No PocketSniffer Wifi found.");
             mNotificationManager.cancel(WIFI_NOTIFICATION_ID);
+
+            for (WifiConfiguration config : mWifiManager.getConfiguredNetworks()) {
+                mWifiManager.enableNetwork(config.networkId, false);
+            }
+            if (!Utils.hasNetworkConnection(mContext, ConnectivityManager.TYPE_WIFI)) {
+                mWifiManager.reconnect();
+            }
             return;
         }
 
@@ -178,19 +172,45 @@ public class ScanResultTask extends PeriodicTask<ScanResultTaskParameters, ScanR
         }
     }
 
-    private void handleSupplicantState(Intent intent) {
-    }
-
     public void handleRSSIChange(Intent intent) {
+        JSONObject json = new JSONObject();
+
+        try {
+            json.put(Logger.KEY_ACTION, intent.getAction());
+            json.put("wifiInfo", Utils.getWifiInfo(mContext));
+            mLogger.log(json);
+            Log.i(TAG, json.toString());
+        }
+        catch (Exception e) {
+            // ignore
+        }
     }
 
     public void handleConnectivity(Intent intent) {
-        int type = intent.getIntExtra(ConnectivityManager.EXTRA_NETWORK_TYPE, -1);
-        if (type != ConnectivityManager.TYPE_WIFI) {
-            return;
+        JSONObject json = new JSONObject();
+        try {
+            json.put(Logger.KEY_ACTION, intent.getAction());
+            json.put("failOver", intent.getBooleanExtra(ConnectivityManager.EXTRA_IS_FAILOVER, false));
+            json.put("networkType", intent.getIntExtra(ConnectivityManager.EXTRA_NETWORK_TYPE, 0));
+            json.put("noConnecitivity", intent.getBooleanExtra(ConnectivityManager.EXTRA_NO_CONNECTIVITY, false));
+            json.put("reason", intent.getStringExtra(ConnectivityManager.EXTRA_REASON));
+
+            NetworkInfo info = mConnectivityManager.getActiveNetworkInfo();
+            if (info != null) {
+                json.put("connected", info.isConnected());
+            }
+            else {
+                json.put("connected", false);
+            }
+            mLogger.log(json);
+            Log.i(TAG, json.toString());
+        }
+        catch (Exception e) {
+            // ignore
         }
 
-        if (Utils.hasNetworkConnection(mContext, ConnectivityManager.TYPE_WIFI)) {
+        WifiInfo info = mWifiManager.getConnectionInfo();
+        if (info != null && mParameters.targetSSID.equals(Utils.stripQuotes(info.getSSID()))) {
             mNotificationManager.cancel(WIFI_NOTIFICATION_ID);
         }
     }
@@ -200,7 +220,7 @@ public class ScanResultTask extends PeriodicTask<ScanResultTaskParameters, ScanR
 
         try {
             json.put("timestamp", System.currentTimeMillis());
-            json.put("mac", LocalUtils.getMacAddress("wlan0"));
+            json.put("mac", Utils.getMacAddress("wlan0"));
             json.put("output", Utils.call("iw wlan0 scan", -1 /* no timeout */, true /* require su */)[1]);
         }
         catch (Exception e) {
@@ -222,9 +242,6 @@ public class ScanResultTask extends PeriodicTask<ScanResultTaskParameters, ScanR
                 if (WifiManager.SCAN_RESULTS_AVAILABLE_ACTION.equals(action)) {
                     handleScanResult(intent);
                 }
-                else if (WifiManager.SUPPLICANT_STATE_CHANGED_ACTION.equals(action)) {
-                    handleSupplicantState(intent);
-                }
                 else if (WifiManager.RSSI_CHANGED_ACTION.equals(action)) {
                     handleRSSIChange(intent);
                 }
@@ -238,7 +255,7 @@ public class ScanResultTask extends PeriodicTask<ScanResultTaskParameters, ScanR
         }
     };
 
-    
+
 
 
 
@@ -274,7 +291,6 @@ public class ScanResultTask extends PeriodicTask<ScanResultTaskParameters, ScanR
         wifiIntentFilter.addAction(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION);
         wifiIntentFilter.addAction(WifiManager.RSSI_CHANGED_ACTION);
         wifiIntentFilter.addAction(WifiManager.WIFI_STATE_CHANGED_ACTION);
-        wifiIntentFilter.addAction(WifiManager.SUPPLICANT_STATE_CHANGED_ACTION);
         wifiIntentFilter.addAction(ConnectivityManager.CONNECTIVITY_ACTION);
         mContext.registerReceiver(mWifiReceiver, wifiIntentFilter);
     }
