@@ -22,7 +22,6 @@ import edu.buffalo.cse.pocketsniffer.utils.Logger;
 public class BatteryTask extends PeriodicTask<BatteryTaskParameters, BatteryTaskState> {
 
     private static final String TAG = LocalUtils.getTag(BatteryTask.class);
-    private static final String ACTION = BatteryTask.class.getName() + ".BatteryStatus";
 
     private Logger mLogger;
 
@@ -36,9 +35,9 @@ public class BatteryTask extends PeriodicTask<BatteryTaskParameters, BatteryTask
     protected void check(BatteryTaskParameters arg0) throws Exception {
         mState.batteryInfo = new BatteryInfo(mContext);
         JSONObject json = mState.batteryInfo.toJSONObject();
-        json.put(Logger.KEY_ACTION, ACTION);
+        json.put(Logger.KEY_ACTION, Intent.ACTION_BATTERY_CHANGED);
 
-        Log.d(TAG, json.toString());
+        Log.i(TAG, json.toString());
         mLogger.log(json);
     }
 
@@ -163,7 +162,6 @@ class BatteryInfo {
     public JSONObject toJSONObject() {
         JSONObject json = new JSONObject();
         try {
-            json.put("action", Intent.ACTION_BATTERY_CHANGED);
             json.put("status", status);
             json.put("plug", plug);
             json.put("level", level);
