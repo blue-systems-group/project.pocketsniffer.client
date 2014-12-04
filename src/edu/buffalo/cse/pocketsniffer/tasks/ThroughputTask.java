@@ -29,6 +29,7 @@ public class ThroughputTask extends PeriodicTask<ThroughputTaskParameters, Throu
     private static final String ACTION = ThroughputTask.class.getName() + ".Throughput";
 
     private static final int BUFFER_SIZE = 4096;
+    private byte[] buffer = new byte[BUFFER_SIZE];
     
     private Logger mLogger;
 
@@ -60,7 +61,6 @@ public class ThroughputTask extends PeriodicTask<ThroughputTaskParameters, Throu
             start = System.currentTimeMillis();
             {
                 InputStream in = new BufferedInputStream(connection.getInputStream());
-                byte[] buffer = new byte[BUFFER_SIZE];
                 size = 0;
                 totalSize = 0;
                 while ((size = in.read(buffer)) != -1) {
@@ -112,7 +112,7 @@ public class ThroughputTask extends PeriodicTask<ThroughputTaskParameters, Throu
         }
         json.put("results", results);
 
-        Log.d(TAG, json.toString());
+        Log.i(TAG, json.toString());
         mLogger.log(json);
     }
 
@@ -162,7 +162,6 @@ class ThroughputTaskParameters extends PeriodicParameters {
         readTimeoutSec = 10;
 
         urls = new ArrayList<String>();
-        urls.add("http://192.168.1.1:8080/downloads/test-100M.bin");
     }
 
     public ThroughputTaskParameters(ThroughputTaskParameters params) {
