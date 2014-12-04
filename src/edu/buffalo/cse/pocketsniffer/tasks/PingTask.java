@@ -78,6 +78,10 @@ public class PingTask extends PeriodicTask<PingTaskParameters, PingTaskState> {
         json.put(Logger.KEY_ACTION, ACTION);
 
         for (String host : parameters.hosts) {
+            if (!Utils.hasNetworkConnection(mContext)) {
+                break;
+            }
+
             JSONObject entry = new JSONObject();
             entry.put("host", host);
             List<String> cmd = new ArrayList<String>();

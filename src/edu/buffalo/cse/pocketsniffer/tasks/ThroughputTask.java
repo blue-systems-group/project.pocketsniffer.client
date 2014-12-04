@@ -107,6 +107,9 @@ public class ThroughputTask extends PeriodicTask<ThroughputTaskParameters, Throu
         json.put(Logger.KEY_ACTION, ACTION);
 
         for (String url: parameters.urls) {
+            if (!Utils.hasNetworkConnection(mContext)) {
+                break;
+            }
             Log.d(TAG, "Try downloading " + url);
             results.put(download(url));
         }

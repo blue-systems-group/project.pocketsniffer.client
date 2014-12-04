@@ -34,10 +34,10 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
     private ServerThread mServerThread = null;
     private ServerSocket mServerSock;
 
+    private SnifTask mSnifTask;
+
     public ServerTask(Context context) {
         super(context, ServerTask.class.getSimpleName());
-
-        addAction(ConnectivityManager.CONNECTIVITY_ACTION);
     }
 
     public void startServerThread() {
@@ -68,6 +68,10 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
     }
 
     private boolean shouldServerRunning() {
+        if (mSnifTask != null) {
+            return true;
+        }
+
         if (!Utils.hasNetworkConnection(mContext, ConnectivityManager.TYPE_WIFI)) {
             Log.d(TAG, "No wifi connection, server should not run.");
             return false;
@@ -250,12 +254,12 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
         private void handleCollect(JSONObject request, JSONObject reply) throws JSONException, Exception {
             reply.put("mac", Utils.getMacAddress("wlan0"));
 
-            if (request.optBoolean("client_scan", false)) {
+            if (request.optBoolean("clientScan", false)) {
                 Log.d(TAG, "Collecting scan result.");
                 reply.put("scanResult", getScanResult());
             }
 
-            if (request.optBoolean("client_traffic", false)) {
+            if (request.optBoolean("clientTraffic", false)) {
                 if (!Utils.isPhoneLabDevice(mContext)) {
                     Log.w(TAG, "Not PhoneLab devices, ignoring traffic request.");
                 }
@@ -278,10 +282,11 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
                     params.packetCount = -1;
                     params.forever = false;
 
-                    SnifTask task = new SnifTask(mContext, null);
-                    task.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, params);
+                    mSnifTask = new SnifTask(mContext, null);
+                    mSnifTask.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, params);
 
-                    reply.put("traffic", task.get().toJSONObject());
+                    reply.put("traffic", mSnifTask.get().toJSONObject());
+                    mSnifTask = null;
 
                     Log.d(TAG, "Waiting for Wifi connection.");
                     while (!Utils.hasNetworkConnection(mContext, ConnectivityManager.TYPE_WIFI)) {
@@ -298,7 +303,7 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
             JSONObject reply = new JSONObject();
 
             try {
-                if (request.has("action")) {
+                if (!request.has("action")) {
                     Log.e(TAG, "No action specified. Ingoring.");
                     reply = null;
                 }
