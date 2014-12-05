@@ -252,7 +252,6 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
         }
 
         private void handleCollect(JSONObject request, JSONObject reply) throws JSONException, Exception {
-            reply.put("mac", Utils.getMacAddress("wlan0"));
 
             if (request.optBoolean("clientScan", false)) {
                 Log.d(TAG, "Collecting scan result.");
@@ -303,9 +302,11 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
             JSONObject reply = new JSONObject();
 
             try {
+                reply.put("mac", Utils.getMacAddress("wlan0"));
+                reply.put("isPhoneLabPhone", Utils.isPhoneLabDevice(mContext));
+
                 if (!request.has("action")) {
                     Log.e(TAG, "No action specified. Ingoring.");
-                    reply = null;
                 }
                 else if ("collect".equals(request.getString("action"))) {
                     handleCollect(request, reply);
@@ -319,7 +320,6 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
             }
             return reply;
         }
-
     }
 
     private void closeServerSocket() {
