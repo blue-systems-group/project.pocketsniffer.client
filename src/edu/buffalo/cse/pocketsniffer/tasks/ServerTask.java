@@ -6,7 +6,6 @@ import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.net.SocketTimeoutException;
 import java.nio.charset.Charset;
 
 import org.json.JSONArray;
@@ -17,6 +16,8 @@ import org.simpleframework.xml.Root;
 
 import android.content.Context;
 import android.net.ConnectivityManager;
+import android.net.wifi.ScanResult;
+import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiInfo;
 import android.os.AsyncTask;
 import android.util.Log;
@@ -295,7 +296,39 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
             }
         }
 
-        private void handleExecute(JSONObject request, JSONObject reply) {
+        private void handleExecute(JSONObject request, JSONObject reply) throws JSONException {
+            String bssid = request.getString("assoc").toLowerCase();
+
+            boolean found = false;
+            for (ScanResult result: mWifiManager.getScanResults()) {
+                if (result.BSSID.toLowerCase().equals(bssid)) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                Log.d(TAG, "BSSID " + bssid + " is not visible.");
+                return;
+            }
+
+            WifiConfiguration config = null;
+            for (WifiConfiguration c : mWifiManager.getConfiguredNetworks()) {
+                if (Utils.stripQuotes(c.SSID).equals(mParameters.targetSSID)) {
+                    config = c;
+                    break;
+                }
+            }
+            if (config == null) {
+                Log.d(TAG, "No PocketSniffer AP config found.");
+            }
+            else {
+                Log.d(TAG, "Setting PocketSniffer AP config BSSID to " + bssid);
+                mWifiManager.disconnect();
+                config.BSSID = bssid.toUpperCase();
+                mWifiManager.updateNetwork(config);
+                mWifiManager.saveConfiguration();
+                mWifiManager.reassociate();
+            }
         }
 
         private JSONObject handle(JSONObject request) {
@@ -317,6 +350,10 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
             }
             catch (Exception e) {
                 Log.e(TAG, "Failed to handle request.", e);
+            }
+
+            if (reply.length() == 0) {
+                reply = null;
             }
             return reply;
         }
