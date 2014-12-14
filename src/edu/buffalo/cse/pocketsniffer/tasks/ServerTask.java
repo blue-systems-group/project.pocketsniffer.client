@@ -1,12 +1,18 @@
 package edu.buffalo.cse.pocketsniffer.tasks;
 
+import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.File;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.URL;
+import java.net.URLConnection;
 import java.nio.charset.Charset;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -233,30 +239,106 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
         }
 
         private JSONObject getScanResult() {
-            JSONObject json = new JSONObject();
+            JSONObject scanResult = new JSONObject();
 
             try {
-                json.put("timestamp", System.currentTimeMillis());
+                scanResult.put("MAC", Utils.getMacAddress("wlan0"));
+                scanResult.put("timestamp", Utils.getDateTimeString());
                 if (new File("/system/bin/iw").exists()) {
-                    json.put("detailed", true);
-                    json.put("output", Utils.call("iw wlan0 scan", -1 /* no timeout */, true /* require su */)[1]);
+                    scanResult.put("detailed", true);
+                    scanResult.put("iwScanOutput", Utils.call("iw wlan0 scan", -1 /* no timeout */, true /* require su */)[1]);
                 }
                 else {
-                    json.put("detailed", false);
-                    json.put("results", Utils.getScanResults(mContext));
+                    scanResult.put("detailed", false);
+                    scanResult.put("resultList", Utils.getScanResults(mContext));
                 }
             }
             catch (Exception e) {
                 // ignore
             }
-            return json;
+            return scanResult;
+        }
+
+        private void parsePingOutput(String output, JSONObject entry) {
+            for (String line : output.split("\n")) {
+                line = line.trim();
+                Log.d(TAG, "Parsing line: " + line);
+
+                try {
+                    if (line.matches("^\\d*\\spackets transmitted.*$")) {
+                        String[] parts = line.split(" ");
+                        entry.put("packetTransmitted", Integer.parseInt(parts[0]));
+                        entry.put("packetReceived", Integer.parseInt(parts[3]));
+                    }
+                    else if (line.startsWith("rtt")) {
+                        String[] parts = line.split(" ")[3].split("/");
+                        entry.put("minRTT", Double.parseDouble(parts[0]));
+                        entry.put("avgRTT", Double.parseDouble(parts[1]));
+                        entry.put("maxRTT", Double.parseDouble(parts[2]));
+                        entry.put("stdDev", Double.parseDouble(parts[3]));
+                    }
+                }
+                catch (Exception e) {
+                    Log.e(TAG, "Failed to parse line: " + line, e);
+                }
+            }
+        }
+
+        private void tryDownload(String url, JSONObject entry) {
+            long start, end;
+            int size, totalSize;
+            byte[] buffer = new byte[4096];
+
+            try {
+                URLConnection connection = (new URL(url)).openConnection();
+                start = System.currentTimeMillis();
+                {
+                    InputStream in = new BufferedInputStream(connection.getInputStream());
+                    size = 0;
+                    totalSize = 0;
+                    while ((size = in.read(buffer)) != -1) {
+                        totalSize += size;
+                    }
+                }
+                end = System.currentTimeMillis();
+            }
+            catch (Exception e) {
+                Log.e(TAG, "Failed to download from " + url, e);
+                try {
+                    entry.put("success", false);
+                }
+                catch (Exception ex) {
+                    // ignore
+                }
+                return;
+            }
+
+            try {
+                entry.put("success", true);
+                entry.put("fileSize", totalSize);
+                entry.put("duration", (end-start)/1000);
+                entry.put("throughput", Double.valueOf(String.format("%.2f", (double)totalSize/1024/1024/(end-start)*1000)));
+            }
+            catch (Exception e) {
+                // ignore
+            }
         }
 
         private void handleCollect(JSONObject request, JSONObject reply) throws JSONException, Exception {
 
+            if (request.optBoolean("phonelabDevice", false)) {
+                JSONArray array = new JSONArray();
+                if (Utils.isPhoneLabDevice(mContext)) {
+                    array.put(Utils.getMacAddress("wlan0"));
+                }
+                reply.put("phonelabDevice", array);
+            }
+
             if (request.optBoolean("clientScan", false)) {
                 Log.d(TAG, "Collecting scan result.");
-                reply.put("scanResult", getScanResult());
+                JSONArray array = new JSONArray();
+                array.put(getScanResult());
+                reply.put("clientScan", array);
             }
 
             if (request.optBoolean("clientTraffic", false)) {
@@ -267,7 +349,7 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
                     Log.d(TAG, "Collecting traffic condition.");
 
                     SnifTask.Params params = new SnifTask.Params();
-                    if (request.has("channels")) {
+                    if (request.has("trafficChannel")) {
                         JSONArray channels = request.getJSONArray("channels");
                         for (int i = 0; i < channels.length(); i++) {
                             params.channels.add(channels.getInt(i));
@@ -278,14 +360,14 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
                         params.channels.add(6);
                         params.channels.add(11);
                     }
-                    params.durationSec = request.optInt("durationSec", 30);
+                    params.durationSec = request.optInt("channelDwellTime", 30);
                     params.packetCount = -1;
                     params.forever = false;
 
                     mSnifTask = new SnifTask(mContext, null);
                     mSnifTask.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, params);
 
-                    reply.put("traffic", mSnifTask.get().toJSONObject());
+                    reply.put("clientTraffic", mSnifTask.get().toJSONObject());
                     mSnifTask = null;
 
                     Log.d(TAG, "Waiting for Wifi connection.");
@@ -294,10 +376,59 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
                     }
                 }
             }
+
+            if (request.optBoolean("clientLatency", false)) {
+                if (!request.has("hosts")) {
+                    Log.d(TAG, "No hosts specified for latency test. Ignoring.");
+                }
+                else {
+                    JSONArray hosts = request.getJSONArray("hosts");
+                    JSONArray results = new JSONArray();
+                    for (int i = 0; i < hosts.length(); i++) {
+                        String host = hosts.getString(i);
+                        JSONObject entry = new JSONObject();
+                        entry.put("timestamp", Utils.getDateTimeString());
+                        entry.put("MAC", Utils.getMacAddress("wlan0"));
+                        entry.put("host", host);
+
+                        List<String> cmd = new ArrayList<String>();
+                        cmd.add("ping");
+                        cmd.add("-c");
+                        cmd.add("10");
+                        cmd.add(host);
+                        Log.d(TAG, "Ping " + host + " ...");
+                        String output = (String) Utils.call(cmd, -1 /* no timeout*/, false /* do not require su */)[1];
+                        parsePingOutput(output, entry);
+
+                        results.put(entry);
+                    }
+                    reply.put("clientLatency", results);
+                }
+            }
+
+            if (request.optBoolean("clientThroughput", false)) {
+                if (!request.has("urls")) {
+                    Log.d(TAG, "No urls specified for throughput test. Ignoring.");
+                }
+                else {
+                    JSONArray urls = request.getJSONArray("urls");
+                    JSONArray results = new JSONArray();
+                    for (int i = 0; i < urls.length(); i++) {
+                        String url = urls.getString(i);
+                        JSONObject entry = new JSONObject();
+                        entry.put("timestamp", Utils.getDateTimeString());
+                        entry.put("MAC", Utils.getMacAddress("wlan0"));
+                        entry.put("url", url);
+                        tryDownload(url, entry);
+                        results.put(entry);
+                    }
+                    reply.put("clientThroughput", results);
+                }
+            }
         }
 
-        private void handleExecute(JSONObject request, JSONObject reply) throws JSONException {
-            String bssid = request.getString("assoc").toLowerCase();
+        private void handleReassoc(JSONObject request, JSONObject reply) throws JSONException {
+            String bssid = request.getString("newBSSID").toLowerCase();
 
             boolean found = false;
             for (ScanResult result: mWifiManager.getScanResults()) {
@@ -323,36 +454,39 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
             }
             else {
                 Log.d(TAG, "Setting PocketSniffer AP config BSSID to " + bssid);
-                mWifiManager.disconnect();
                 config.BSSID = bssid.toUpperCase();
                 mWifiManager.updateNetwork(config);
                 mWifiManager.saveConfiguration();
-                mWifiManager.reassociate();
+                mWifiManager.disconnect();
+                mWifiManager.reconnect();
             }
         }
 
         private JSONObject handle(JSONObject request) {
+            if (!request.has("action")) {
+                Log.e(TAG, "Request does not have an action.");
+                return null;
+            }
+
             JSONObject reply = new JSONObject();
 
             try {
-                reply.put("mac", Utils.getMacAddress("wlan0"));
-                reply.put("isPhoneLabPhone", Utils.isPhoneLabDevice(mContext));
+                reply.put("request", request);
 
-                if (!request.has("action")) {
-                    Log.e(TAG, "No action specified. Ingoring.");
-                }
-                else if ("collect".equals(request.getString("action"))) {
+                String action = request.getString("action");
+                if ("collect".equals(action)) {
                     handleCollect(request, reply);
                 }
-                else if ("execute".equals(request.getString("action"))) {
-                    handleExecute(request, reply);
+                else if ("clientReassoc".equals(action)) {
+                    handleReassoc(request, reply);
                 }
             }
             catch (Exception e) {
                 Log.e(TAG, "Failed to handle request.", e);
+                reply = null;
             }
 
-            if (reply.length() == 0) {
+            if (reply != null && reply.length() == 0) {
                 reply = null;
             }
             return reply;

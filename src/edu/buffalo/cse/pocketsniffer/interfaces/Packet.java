@@ -18,7 +18,6 @@ public class Packet {
     public int rssi;
     public int freq;
     public boolean crcOK;
-    public String SSID;
 
     @Override
     public String toString() {

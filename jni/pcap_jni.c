@@ -189,7 +189,8 @@ JNIEXPORT jboolean JNICALL Java_edu_buffalo_cse_pocketsniffer_tasks_SnifTask_par
         } COFFEE_END();
         (*env)->SetBooleanField(env, packet, g_packet_fields[11].id, bool_val);
 
-        // SSID
+        // SSID (deprecated)
+        /*
         if (FC_TYPE(dot11_hdr->frame_ctrl) == DOT11_TYPE_MGMT && FC_SUBTYPE(dot11_hdr->frame_ctrl) == DOT11_SUBTYPE_BEACON) {
             if (get_ssid(pkt, pkt_len, buf, sizeof(buf)) >= 0) {
                 str_val = (*env)->NewStringUTF(env, buf);
@@ -200,6 +201,7 @@ JNIEXPORT jboolean JNICALL Java_edu_buffalo_cse_pocketsniffer_tasks_SnifTask_par
         else {
             (*env)->SetObjectField(env, packet, g_packet_fields[12].id, NULL);
         }
+        */
 
         (*env)->CallVoidMethod(env, this, g_got_pkt, packet);
     }

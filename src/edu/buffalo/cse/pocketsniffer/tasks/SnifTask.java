@@ -3,17 +3,14 @@ package edu.buffalo.cse.pocketsniffer.tasks;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 import android.content.Context;
-import android.net.wifi.ScanResult;
 import android.net.wifi.WifiManager;
 import android.os.PowerManager;
 import android.os.PowerManager.WakeLock;
@@ -22,9 +19,8 @@ import android.util.Log;
 import edu.buffalo.cse.phonelab.toolkit.android.utils.Utils;
 import edu.buffalo.cse.pocketsniffer.interfaces.AsyncTaskListener;
 import edu.buffalo.cse.pocketsniffer.interfaces.Packet;
-import edu.buffalo.cse.pocketsniffer.interfaces.Station;
 import edu.buffalo.cse.pocketsniffer.interfaces.Task;
-import edu.buffalo.cse.pocketsniffer.interfaces.TrafficFlow;
+import edu.buffalo.cse.pocketsniffer.interfaces.TrafficEntry;
 import edu.buffalo.cse.pocketsniffer.utils.LocalUtils;
 
 public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.Result> {
@@ -49,13 +45,7 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
     private File mDataDir;
     private WifiManager mWifiManager;
 
-    private Map<String, TrafficFlow> mTrafficFlowCache;
-    private Map<String, Station> mStationCache;
-    private Integer mPacketCount;
-    private Integer mCorruptedPacketCount;
-    private Integer mIgnoredPacketCount;
-
-    private Result mLastResult;
+    private Map<String, TrafficEntry> mTrafficEntryCache;
 
     private WakeLock mWakeLock;
     private WifiManager.WifiLock mWifiLock;
@@ -66,8 +56,7 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
         super(context, listener);
         mDataDir = mContext.getDir("pcap", Context.MODE_PRIVATE);
         mWifiManager = (WifiManager) mContext.getSystemService(Context.WIFI_SERVICE);
-        mTrafficFlowCache = new HashMap<String, TrafficFlow>();
-        mStationCache = new HashMap<String, Station>();
+        mTrafficEntryCache = new HashMap<String, TrafficEntry>();
         
         PowerManager powerManager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
         mWakeLock = powerManager.newWakeLock(PowerManager.SCREEN_DIM_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP, TAG);
@@ -78,106 +67,48 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
      * Before parsing any packets, clear storage, and update scan results.
      */
     private void startParsing() {
-        mTrafficFlowCache.clear();
-        mStationCache.clear();
-
-        mCorruptedPacketCount = 0;
-        mPacketCount = 0;
-        mIgnoredPacketCount = 0;
-
-        for (ScanResult result : mWifiManager.getScanResults()) {
-            String key = Station.getKey(result.BSSID);
-            if (!mStationCache.containsKey(key)) {
-                mStationCache.put(key, new Station(result));
-                Log.d(TAG, "Putting " + result.SSID + " (" + key + ")");
-            }
-        }
+        mTrafficEntryCache.clear();
     }
 
     /**
      * This function get called on each packet.
      */
     private void gotPacket(Packet pkt) {
-        mPacketCount++;
-
         if (!pkt.crcOK) {
-            Log.d(TAG, "Corrupted packet detected.");
-            mCorruptedPacketCount++;
             return;
         }
 
-        Station from, to;
-        TrafficFlow flow;
-        String key;
-
-        if (pkt.addr2 != null) {
-            key = Station.getKey(pkt.addr2);
-            if (!mStationCache.containsKey(key)) {
-                from = new Station(pkt.addr2);
-                from.freq = pkt.freq;
-                mStationCache.put(key, from);
-            }
-            else {
-                from = mStationCache.get(key);
-            }
-            if (pkt.SSID != null) {
-                from.SSID = pkt.SSID;
-                from.isAP = true;
-            }
-            from.rssiList.add(pkt.rssi);
-        }
-        else {
-            from = null;
-        }
-
-        if (!BROADCAST_MAC.equals(pkt.addr1)) {
-            key = Station.getKey(pkt.addr1);
-            if (!mStationCache.containsKey(key)) {
-                to = new Station(pkt.addr1);
-                to.freq = pkt.freq;
-                mStationCache.put(key, to);
-            }
-            else {
-                to = mStationCache.get(key);
-            }
-        }
-        else {
-            to = null;
-        }
+        String from = pkt.addr2;
+        String to = pkt.addr1;
 
         // only count data packets for traffic volumns
         if (pkt.type != FRAME_TYPE_DATA || !(pkt.subtype == FRAME_SUBTYPE_DATA || pkt.subtype == FRAME_SUBTYPE_QOS_DATA) || from == null || to == null) {
-            mIgnoredPacketCount++;
             return;
         }
 
-        if (from.isAP && from.SSID != null && !to.isAP) {
-            to.SSID = from.SSID;
-        }
-        if (to.isAP && to.SSID != null && !from.isAP) {
-            from.SSID = to.SSID;
-        }
+        TrafficEntry entry = null;
 
-        key = TrafficFlow.getKey(from, to);
-        if (!mTrafficFlowCache.containsKey(key)) {
-            flow = new TrafficFlow(from, to);
-            flow.startMs = pkt.tv_sec * 1000 + pkt.tv_usec / 1000;
-            mTrafficFlowCache.put(key, flow);
+        String key = TrafficEntry.getKey(from, to);
+        if (!mTrafficEntryCache.containsKey(key)) {
+            entry = new TrafficEntry(from, to);
+            entry.begin = Utils.getDateTimeString(pkt.tv_sec, pkt.tv_usec);
+            mTrafficEntryCache.put(key, entry);
         }
         else {
-            flow = mTrafficFlowCache.get(key);
+            entry = mTrafficEntryCache.get(key);
         }
 
-        flow.packetSizeList.add(pkt.len);
-        if (flow.direction == TrafficFlow.DIRECTION_UNKNOWN) {
-            if (from.SSID != null) {
-                flow.direction = TrafficFlow.DIRECTION_DOWNLINK;
-            }
-            else if (to.SSID != null) {
-                flow.direction = TrafficFlow.DIRECTION_UPLINK;
-            }
+        if (from == entry.from) {
+            entry.txBytes += pkt.len;
+            entry.putTxRSSI(pkt.rssi);
         }
-        flow.endMs = pkt.tv_sec * 1000 + pkt.tv_usec / 1000;
+        else {
+            entry.rxBytes += pkt.len;
+            entry.putRxRSSI(pkt.rssi);
+        }
+
+        entry.channel = Utils.freqToChannel(pkt.freq);
+        entry.end = Utils.getDateTimeString(pkt.tv_sec, pkt.tv_usec);
     }
 
     @Override
@@ -280,18 +211,11 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
                     capFile.delete();
                 }
 
-                result.channelTraffic.put(chan, mTrafficFlowCache.values());
-                result.channelStation.put(chan, mStationCache.values());
-                result.totalPackets += mPacketCount;
-                result.corruptedPackets += mCorruptedPacketCount;
-                result.ignoredPackets += mIgnoredPacketCount;
+                for (TrafficEntry entry : mTrafficEntryCache.values()) {
+                    result.traffics.add(entry);
+                }
 
-                progress.channelFinished = chan;
-                progress.totalPackets = mPacketCount;
-                progress.corruptedPackets = mCorruptedPacketCount;
-                progress.ignoredPackets = mIgnoredPacketCount;
                 progress.partialResult = result;
-
                 publishProgress(progress);
             }
         } while (param.forever);
@@ -309,13 +233,7 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
             // ignore
         }
         mWifiManager.reconnect();
-        result.updated = System.currentTimeMillis();
-        mLastResult = result;
         return result;
-    }
-
-    public Result getLastResult() {
-        return mLastResult;
     }
 
     public static class Params {
@@ -346,71 +264,32 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
     }
 
     public static class Progress {
-        public int channelFinished;
-        public int totalPackets;
-        public int corruptedPackets;
-        public int ignoredPackets;
         public Result partialResult;
 
         public JSONObject toJSONObject() {
-            JSONObject json = new JSONObject();
-            try {
-                json.put("channelFinished", channelFinished);
-                json.put("totalPackets", totalPackets);
-                json.put("corruptedPackets", corruptedPackets);
-                json.put("ignoredPackets", ignoredPackets);
-            }
-            catch (Exception e) {
-            }
-
-            return json;
+            return partialResult.toJSONObject();
         }
     }
 
     public static class Result {
-        public Map<Integer, Collection<TrafficFlow>> channelTraffic;
-        public Map<Integer, Collection<Station>> channelStation;
-        public int totalPackets;
-        public int corruptedPackets;
-        public int ignoredPackets;
-        public long updated;
+        public String timestamp;
+        public List<TrafficEntry> traffics;
 
         public Result () {
-            channelTraffic = new HashMap<Integer, Collection<TrafficFlow>>();
-            channelStation = new HashMap<Integer, Collection<Station>>();
-            totalPackets = 0;
-            corruptedPackets = 0;
-            ignoredPackets = 0;
-            updated = 0L;
+            timestamp = Utils.getDateTimeString();
+            traffics = new ArrayList<TrafficEntry>();
         }
 
         public JSONObject toJSONObject() {
             JSONObject json = new JSONObject();
 
             try {
-                JSONObject channelTrafficJSON = new JSONObject();
-                for (Entry<Integer, Collection<TrafficFlow>> entry : channelTraffic.entrySet()) {
-                    JSONArray array = new JSONArray();
-                    for(TrafficFlow flow : entry.getValue()) {
-                        array.put(flow.toJSONObject());
-                    }
-                    channelTrafficJSON.put(entry.getKey().toString(), array);
+                json.put("MAC", Utils.getMacAddress(WLAN_IFACE));
+                JSONArray array = new JSONArray();
+                for (TrafficEntry entry: traffics) {
+                    array.put(entry.toJSONObject());
                 }
-                json.put("channelTraffic", channelTrafficJSON);
-
-                JSONObject channelStationJSON = new JSONObject();
-                for (Entry<Integer, Collection<Station>> entry : channelStation.entrySet()) {
-                    JSONArray array = new JSONArray();
-                    for (Station station : entry.getValue()) {
-                        array.put(station.toJSONObject());
-                    }
-                    channelStationJSON.put(entry.getKey().toString(), array);
-                }
-                json.put("channelStation", channelStationJSON);
-                
-                json.put("totalPackets", totalPackets);
-                json.put("corruptedPackets", corruptedPackets);
-                json.put("ignoredPackets", ignoredPackets);
+                json.put("traffics", array);
             }
             catch (Exception e) {
                 // ignore
