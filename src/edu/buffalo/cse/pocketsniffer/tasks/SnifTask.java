@@ -40,7 +40,7 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
     private final static int FRAME_TYPE_DATA = 2;
     private final static int FRAME_SUBTYPE_DATA = 0;
     private final static int FRAME_SUBTYPE_QOS_DATA = 8;
-    private final static String BROADCAST_MAC = "FF:FF:FF:FF:FF:FF";
+    private final static String BROADCAST_MAC = "ff:ff:ff:ff:ff:ff";
 
     private File mDataDir;
     private WifiManager mWifiManager;
@@ -81,10 +81,14 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
         String from = pkt.addr2;
         String to = pkt.addr1;
 
-        // only count data packets for traffic volumns
-        if (pkt.type != FRAME_TYPE_DATA || !(pkt.subtype == FRAME_SUBTYPE_DATA || pkt.subtype == FRAME_SUBTYPE_QOS_DATA) || from == null || to == null) {
+        // only count data packets for non-broadcast data traffic volumns
+        if (pkt.type != FRAME_TYPE_DATA || !(pkt.subtype == FRAME_SUBTYPE_DATA || pkt.subtype == FRAME_SUBTYPE_QOS_DATA)
+                || from == null || to == null || to.equals(BROADCAST_MAC)) {
             return;
         }
+
+        from = from.toLowerCase();
+        to = to.toLowerCase();
 
         TrafficEntry entry = null;
 
@@ -123,7 +127,9 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
 
         mWifiManager.disconnect();
 
-        mWakeLock.acquire();
+        if (param.forever) {
+            mWakeLock.acquire();
+        }
         mWifiLock.acquire();
 
         do {
@@ -220,7 +226,9 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
             }
         } while (param.forever);
 
-        mWakeLock.release();
+        if (param.forever) {
+            mWakeLock.release();
+        }
         mWifiLock.release();
 
         try {
@@ -285,6 +293,7 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
 
             try {
                 json.put("MAC", Utils.getMacAddress(WLAN_IFACE));
+                json.put("timestamp", timestamp);
                 JSONArray array = new JSONArray();
                 for (TrafficEntry entry: traffics) {
                     array.put(entry.toJSONObject());

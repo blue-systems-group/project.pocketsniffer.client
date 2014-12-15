@@ -18,8 +18,6 @@ public class TrafficEntry {
     public long rxBytes;
     public String begin;
     public String end;
-    private int avgTxRSSI;
-    private int avgRxRSSI;
 
     private List<Integer> rxRSSI;
     private List<Integer> txRSSI;
@@ -54,18 +52,47 @@ public class TrafficEntry {
         txRSSI.add(rssi);
     }
 
+    public int getAvgTxRSSI() {
+        int sum = 0;
+        for (int rssi : txRSSI) {
+            sum += rssi;
+        }
+        if (txRSSI.size() == 0) {
+            return 0;
+        }
+        else {
+            return sum / txRSSI.size();
+        }
+    }
+
+    public int getAvgRxRSSI() {
+        int sum = 0;
+        for (int rssi : rxRSSI) {
+            sum += rssi;
+        }
+        if (rxRSSI.size() == 0) {
+            return 0;
+        }
+        else {
+            return sum / rxRSSI.size();
+        }
+    }
+
+
+
     public JSONObject toJSONObject() {
         JSONObject json = new JSONObject();
 
         try {
+            json.put("channel", channel);
             json.put("from", from);
             json.put("to", to);
             json.put("txBytes", txBytes);
             json.put("rxBytes", rxBytes);
             json.put("begin", begin);
             json.put("end", end);
-            json.put("avgTxRSSI", avgTxRSSI);
-            json.put("avgRxRSSI", avgRxRSSI);
+            json.put("avgTxRSSI", getAvgTxRSSI());
+            json.put("avgRxRSSI", getAvgRxRSSI());
         }
         catch (Exception e) {
             // ignore

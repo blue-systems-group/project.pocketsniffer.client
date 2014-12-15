@@ -38,8 +38,8 @@ static obj_field_t g_packet_fields[] = {
     { .name = "rssi",       .type = "I" }, // 9
     { .name = "freq",       .type = "I" }, // 10
     { .name = "crcOK",      .type = "Z" }, // 11
-    { .name = "SSID",       .type = "Ljava/lang/String;" }, // 12
-#define PACKET_FILED_NUM  13
+    // { .name = "SSID",       .type = "Ljava/lang/String;" }, // 12
+#define PACKET_FILED_NUM  12
 };
 
 static jclass g_snif_task_class;

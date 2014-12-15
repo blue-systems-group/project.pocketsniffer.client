@@ -350,7 +350,7 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
 
                     SnifTask.Params params = new SnifTask.Params();
                     if (request.has("trafficChannel")) {
-                        JSONArray channels = request.getJSONArray("channels");
+                        JSONArray channels = request.getJSONArray("trafficChannel");
                         for (int i = 0; i < channels.length(); i++) {
                             params.channels.add(channels.getInt(i));
                         }
@@ -367,7 +367,9 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
                     mSnifTask = new SnifTask(mContext, null);
                     mSnifTask.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, params);
 
-                    reply.put("clientTraffic", mSnifTask.get().toJSONObject());
+                    JSONArray array = new JSONArray();
+                    array.put(mSnifTask.get().toJSONObject());
+                    reply.put("clientTraffic", array);
                     mSnifTask = null;
 
                     Log.d(TAG, "Waiting for Wifi connection.");
