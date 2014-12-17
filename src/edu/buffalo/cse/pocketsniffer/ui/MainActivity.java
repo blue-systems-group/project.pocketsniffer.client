@@ -63,6 +63,7 @@ public class MainActivity extends Activity {
         setContentView(mViewPager);
 
         mTabInfos = new ArrayList<TabInfo>();
+        mTabInfos.add(new TabInfo("Devices", DeviceFragment.class));
         mTabInfos.add(new TabInfo("Info", InfoFragment.class));
         mTabInfos.add(new TabInfo("Access Points", APFragment.class));
 

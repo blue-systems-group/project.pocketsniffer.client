@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+adb shell am broadcast -a edu.buffalo.cse.pocketsniffer.tasks.ProximityTask.Check

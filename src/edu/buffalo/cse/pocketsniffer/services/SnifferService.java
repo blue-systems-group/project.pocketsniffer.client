@@ -13,12 +13,6 @@ import android.util.Log;
 import edu.buffalo.cse.phonelab.toolkit.android.periodictask.PeriodicTask;
 import edu.buffalo.cse.phonelab.toolkit.android.services.ManifestService;
 import edu.buffalo.cse.phonelab.toolkit.android.services.UploaderService;
-import edu.buffalo.cse.pocketsniffer.tasks.BatteryTask;
-import edu.buffalo.cse.pocketsniffer.tasks.BuildInfoTask;
-import edu.buffalo.cse.pocketsniffer.tasks.PingTask;
-import edu.buffalo.cse.pocketsniffer.tasks.ScanResultTask;
-import edu.buffalo.cse.pocketsniffer.tasks.ServerTask;
-import edu.buffalo.cse.pocketsniffer.tasks.ThroughputTask;
 import edu.buffalo.cse.pocketsniffer.utils.LocalUtils;
 
 public class SnifferService extends Service {
@@ -42,15 +36,10 @@ public class SnifferService extends Service {
         "edu.buffalo.cse.pocketsniffer.tasks.ScanResultTask",
         "edu.buffalo.cse.pocketsniffer.tasks.ServerTask",
         "edu.buffalo.cse.pocketsniffer.tasks.BuildInfoTask",
+        "edu.buffalo.cse.pocketsniffer.tasks.ProximityTask"
     };
-    private Map<String, PeriodicTask> mTasks;
-    private BatteryTask mBatteryTask;
-    private PingTask mPingTask;
-    private ThroughputTask mThroughputTask;
-    private ScanResultTask mScanResultTask;
-    private ServerTask mServerTask;
-    private BuildInfoTask mBuildInfoTask;
 
+    private Map<String, PeriodicTask> mTasks;
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
