@@ -24,7 +24,6 @@ import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.BaseAdapter;
 import android.widget.CheckBox;
-import android.widget.CompoundButton;
 import android.widget.ListView;
 import android.widget.TextView;
 
@@ -119,7 +118,7 @@ public class DeviceFragment extends Fragment implements Refreshable {
             @Override
             public int compare(BluetoothDeviceInfo lhs, BluetoothDeviceInfo rhs) {
                 if (lhs.interested != rhs.interested) {
-                    return lhs.interested? 1: -1;
+                    return lhs.interested? -1: 1;
                 }
                 return lhs.name.compareTo(rhs.name);
             }
