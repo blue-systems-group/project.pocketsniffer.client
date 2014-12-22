@@ -101,8 +101,8 @@ class ThroughputTaskParameters extends PeriodicParameters {
         checkIntervalSec = 300L;
         maxIntervalSec = 900L;
         minIntervalSec = 300L;
-        maxFileSizeMB = 100;
         minFileSizeMB = 50;
+        maxFileSizeMB = 100;
         iperfHost = "192.168.1.1";
         iperfPort = 5001;
     }

@@ -96,8 +96,11 @@ public class PingTask extends PeriodicTask<PingTaskParameters, PingTaskState> {
         json.put("results", results);
 
         Log.d(TAG, json.toString());
-
         mLogger.log(json);
+
+        long nextInterval = (long) (mParameters.minIntervalSec + Math.random() * (mParameters.maxIntervalSec - mParameters.minIntervalSec));
+        Log.d(TAG, "Schedule next ping in " + nextInterval + " seconds.");
+        startOneShot(nextInterval);
     }
 
     @Override
@@ -135,9 +138,17 @@ class PingTaskParameters extends PeriodicParameters {
     @Element
     public Integer packetNum;
 
+    @Element
+    public Integer minIntervalSec;
+
+    @Element
+    public Integer maxIntervalSec;
+
 
     public PingTaskParameters() {
         checkIntervalSec = 300L;
+        minIntervalSec = 300;
+        maxIntervalSec = 600;
         hosts = new ArrayList<String>();
         packetNum = 10;
     }
