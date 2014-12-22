@@ -1,16 +1,7 @@
 package edu.buffalo.cse.pocketsniffer.tasks;
 
-import java.io.BufferedInputStream;
-import java.io.InputStream;
-import java.net.URL;
-import java.net.URLConnection;
-import java.util.ArrayList;
-import java.util.List;
-
-import org.json.JSONArray;
 import org.json.JSONObject;
 import org.simpleframework.xml.Element;
-import org.simpleframework.xml.ElementList;
 import org.simpleframework.xml.Root;
 
 import android.content.Context;
@@ -45,21 +36,10 @@ public class ThroughputTask extends PeriodicTask<ThroughputTaskParameters, Throu
         }
 
         int fileSizeMB = (int) (mParameters.minFileSizeMB + Math.random() * (mParameters.maxFileSizeMB - mParameters.minFileSizeMB));
-        String url = null;
-        try {
-            url = String.format(mParameters.urlFormat, fileSizeMB);
-        }
-        catch (Exception e) {
-            Log.e(TAG, "Failed to compose download url.", e);
-            startOneShot(mParameters.minIntervalSec);
-            return;
-        }
 
-        JSONObject json = new JSONObject();
+        Log.d(TAG, "Try iperf with " + mParameters.iperfHost + ":" + mParameters.iperfPort);
+        JSONObject json = LocalUtils.iperfTest(mParameters.iperfHost, mParameters.iperfPort, fileSizeMB);
         json.put(Logger.KEY_ACTION, ACTION);
-
-        Log.d(TAG, "Try downloading " + url);
-        LocalUtils.testThroughput(url, json);
 
         Log.i(TAG, json.toString());
         mLogger.log(json);
@@ -100,6 +80,12 @@ public class ThroughputTask extends PeriodicTask<ThroughputTaskParameters, Throu
 class ThroughputTaskParameters extends PeriodicParameters {
 
     @Element
+    String iperfHost;
+
+    @Element
+    Integer iperfPort;
+
+    @Element
     Long maxIntervalSec;
 
     @Element
@@ -111,16 +97,14 @@ class ThroughputTaskParameters extends PeriodicParameters {
     @Element
     Integer minFileSizeMB;
 
-    @Element
-    String urlFormat;
-
     public ThroughputTaskParameters() {
         checkIntervalSec = 300L;
         maxIntervalSec = 900L;
         minIntervalSec = 300L;
         maxFileSizeMB = 100;
         minFileSizeMB = 50;
-        urlFormat = "http://192.168.1.1:8080/downloads/test-%dM.bin";
+        iperfHost = "192.168.1.1";
+        iperfPort = 5001;
     }
 
     public ThroughputTaskParameters(ThroughputTaskParameters params) {
@@ -129,7 +113,8 @@ class ThroughputTaskParameters extends PeriodicParameters {
         this.minIntervalSec = params.minIntervalSec;
         this.maxFileSizeMB = params.maxFileSizeMB;
         this.minFileSizeMB = params.minFileSizeMB;
-        this.urlFormat = params.urlFormat;
+        this.iperfHost = params.iperfHost;
+        this.iperfPort = params.iperfPort;
     }
 }
 

@@ -1,10 +1,6 @@
 package edu.buffalo.cse.pocketsniffer.utils;
 
-import java.io.BufferedInputStream;
 import java.io.File;
-import java.io.InputStream;
-import java.net.URL;
-import java.net.URLConnection;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -18,6 +14,8 @@ import edu.buffalo.cse.phonelab.toolkit.android.utils.Utils;
 public class LocalUtils {
 
     private static String TAG = getTag(LocalUtils.class);
+
+    public static final int MB = 1024*1024;
 
     /** Generate log tag for class.  */
     public static String getTag(Class<?> c) {
@@ -46,12 +44,27 @@ public class LocalUtils {
         cmd.add("-i");
         cmd.add("1");
         cmd.add("-n");
-        cmd.add(sizeMB + "");
+        cmd.add(sizeMB + "M");
 
-        Object[] results = Utils.call(cmd, -1 /* no timeout */, false /* no su */);
-        int retVal = (Integer) results[0];
-        String output = (String) results[1];
-        String err = (String) results[2];
+        long start = 0, end = 0;
+
+        Object[] results = null;
+        int retVal = 0;
+        String output = "";
+        String err = "";
+
+        try {
+            start = System.currentTimeMillis();
+            results = Utils.call(cmd, -1 /* no timeout */, false /* no su */);
+            end = System.currentTimeMillis();
+            retVal = (Integer) results[0];
+            output = (String) results[1];
+            err = (String) results[2];
+        }
+        catch (Exception e) {
+            retVal = -1;
+            output = Log.getStackTraceString(e);
+        }
 
         if (retVal != 0) {
             Log.d(TAG, "Failed to do iperf: " + output + err);
@@ -60,24 +73,45 @@ public class LocalUtils {
         }
 
         List<Double> throughputs = new ArrayList<Double>();
-        double overalThroughputs = 0;
+        double overallThroughputs = 0;
+        double duration = (double) (end - start) / 1000;
 
         for (String line : output.split("\n")) {
+            Log.d(TAG, "Parsing " + line);
             if (!line.endsWith("sec")) {
                 continue;
             }
             String[] parts = line.split(" ");
             double bw = Double.parseDouble(parts[parts.length-2]);
             throughputs.add(bw);
-            overalThroughputs = bw;
+            overallThroughputs = bw;
         }
         throughputs.remove(throughputs.size() - 1);
 
+        double min = -1, max = -1, mean = 0;
+        for (double d : throughputs) {
+            if (min == -1 || d < min) {
+                min = d;
+            }
+            if (max == -1 || d > max) {
+                max = d;
+            }
+            mean += d;
+        }
+        mean /= throughputs.size();
+
+        double stdDev = 0;
+        for (double d : throughputs) {
+            stdDev += Math.pow(d-mean, 2);
+        }
+        stdDev /= throughputs.size();
+        stdDev = Math.sqrt(stdDev);
+
         try {
             entry.put("success", true);
-            entry.put("fileSizeBytes", totalSize);
+            entry.put("fileSizeBytes", sizeMB*MB);
             entry.put("durationMs", duration);
-            entry.put("throughputMbps", Double.valueOf(String.format("%.2f", (double) totalSize/1024/1024/duration*1000)));
+            entry.put("throughputMbps", Double.valueOf(String.format("%.2f", overallThroughputs)));
             entry.put("maxThroughput", Double.valueOf(String.format("%.2f", max)));
             entry.put("minThroughput", Double.valueOf(String.format("%.2f", min)));
             entry.put("stdDev", Double.valueOf(String.format("%.2f", stdDev)));
@@ -85,5 +119,7 @@ public class LocalUtils {
         catch (Exception e) {
             Log.e(TAG, "Failed to put download stats.", e);
         }
+
+        return entry;
     }
 }
