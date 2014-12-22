@@ -1,16 +1,19 @@
 package edu.buffalo.cse.pocketsniffer.utils;
 
 import java.io.BufferedInputStream;
+import java.io.File;
 import java.io.InputStream;
 import java.net.URL;
 import java.net.URLConnection;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
+import org.json.JSONException;
 import org.json.JSONObject;
 
 import android.util.Log;
+
+import edu.buffalo.cse.phonelab.toolkit.android.utils.Utils;
 
 public class LocalUtils {
 
@@ -21,71 +24,54 @@ public class LocalUtils {
         return "PocketSniffer-" + c.getSimpleName();
     }
 
-    public static JSONObject testThroughput(String url) {
-        JSONObject entry = new JSONObject();
-        testThroughput(url, entry);
-        return entry;
+    public static boolean isIperfAvailable() {
+        return (new File("/system/bin/iperf")).exists() || (new File("/system/xbin/iperf")).exists();
     }
 
-    public static void testThroughput(String url, JSONObject entry) {
-        final int BUF_SIZE = 1024*1024;
-        int pos, size, totalSize;
-        long start, end, duration;
-        byte[] buffer = new byte[BUF_SIZE];
+    public static JSONObject iperfTest(String host, int port, int sizeMB) throws JSONException {
+        JSONObject entry = new JSONObject();
+
+        if (!isIperfAvailable()) {
+            entry.put("success", false);
+            return entry;
+        }
+
+        List<String> cmd = new ArrayList<String>();
+
+        cmd.add("iperf");
+        cmd.add("-c");
+        cmd.add(host);
+        cmd.add("-p");
+        cmd.add(port + "");
+        cmd.add("-i");
+        cmd.add("1");
+        cmd.add("-n");
+        cmd.add(sizeMB + "");
+
+        Object[] results = Utils.call(cmd, -1 /* no timeout */, false /* no su */);
+        int retVal = (Integer) results[0];
+        String output = (String) results[1];
+        String err = (String) results[2];
+
+        if (retVal != 0) {
+            Log.d(TAG, "Failed to do iperf: " + output + err);
+            entry.put("success", false);
+            return entry;
+        }
+
         List<Double> throughputs = new ArrayList<Double>();
+        double overalThroughputs = 0;
 
-        try {
-            URLConnection connection = (new URL(url)).openConnection();
-            InputStream in = new BufferedInputStream(connection.getInputStream());
-            size = 0;
-            totalSize = 0;
-            duration = 0;
-            while (true) {
-                pos = 0;
-                start = System.currentTimeMillis();
-                while (pos != buffer.length && (size = in.read(buffer, pos, buffer.length-pos)) != -1) {
-                    pos += size;
-                }
-                end = System.currentTimeMillis();
-
-                duration += (end - start);
-                totalSize += pos;
-
-                if (size == -1) {
-                    break;
-                }
-
-                throughputs.add((double) pos / 1024.0 / 1024.0 / (end - start) * 1000.0);
+        for (String line : output.split("\n")) {
+            if (!line.endsWith("sec")) {
+                continue;
             }
+            String[] parts = line.split(" ");
+            double bw = Double.parseDouble(parts[parts.length-2]);
+            throughputs.add(bw);
+            overalThroughputs = bw;
         }
-        catch (Exception e) {
-            Log.e(TAG, "Failed to download from " + url, e);
-            try {
-                entry.put("success", false);
-            }
-            catch (Exception ex) {
-                // ignore
-            }
-            return;
-        }
-
-        double min = -1, max = -1, mean = 0;
-        for (double d : throughputs) {
-            if (min == -1 || d < min) {
-                min = d;
-            }
-            if (max == -1 || d > max) {
-                max = d;
-            }
-            mean += d;
-        }
-        mean = mean / throughputs.size();
-
-        double stdDev = 0;
-        for (double d : throughputs) {
-            stdDev += Math.pow(d-mean, 2);
-        }
-        stdDev = Math.sqrt(stdDev);
+        throughputs.remove(throughputs.size() - 1);
 
         try {
             entry.put("success", true);
