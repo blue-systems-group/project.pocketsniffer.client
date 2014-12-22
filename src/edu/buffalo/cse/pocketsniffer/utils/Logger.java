@@ -35,7 +35,7 @@ public class Logger implements UploaderClient {
 
     private static final String TAG = LocalUtils.getTag(Logger.class);
     private static final int FLUSH_LINES = 1;
-    private static final int RORATE_LINES = 512;
+    private static final int RORATE_LINES = 128;
 
     private static Logger mInstance;
     private File mFileDir;
