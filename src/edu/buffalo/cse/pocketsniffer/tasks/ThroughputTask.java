@@ -28,69 +28,12 @@ public class ThroughputTask extends PeriodicTask<ThroughputTaskParameters, Throu
     private static final String TAG = LocalUtils.getTag(ThroughputTask.class);
     private static final String ACTION = ThroughputTask.class.getName() + ".Throughput";
 
-    private static final int BUFFER_SIZE = 4096;
-    private byte[] buffer = new byte[BUFFER_SIZE];
-    
     private Logger mLogger;
 
     public ThroughputTask(Context context) {
         super(context, ThroughputTask.class.getSimpleName());
 
         mLogger = Logger.getInstance(mContext);
-    }
-
-    private JSONObject download(String url) {
-        JSONObject result = new JSONObject();
-
-        try {
-            result.put("URL", url);
-        }
-        catch (Exception e) {
-            // ignore
-        }
-
-        long start, end;
-        int size, totalSize;
-
-
-        try {
-            URLConnection connection = (new URL(url)).openConnection();
-            connection.setConnectTimeout(mParameters.connectionTimeoutSec * 1000);
-            connection.setReadTimeout(mParameters.readTimeoutSec * 1000);
-
-            start = System.currentTimeMillis();
-            {
-                InputStream in = new BufferedInputStream(connection.getInputStream());
-                size = 0;
-                totalSize = 0;
-                while ((size = in.read(buffer)) != -1) {
-                    totalSize += size;
-                }
-            }
-            end = System.currentTimeMillis();
-        }
-        catch (Exception e) {
-            Log.e(TAG, "Failed to download from " + url, e);
-            try {
-                result.put("success", false);
-            }
-            catch (Exception ex) {
-                // ignore
-            }
-            return result;
-        }
-
-        try {
-            result.put("success", true);
-            result.put("fileSize", totalSize);
-            result.put("durationSec", (end-start)/1000);
-            result.put("throughputMBps", Double.valueOf(String.format("%.2f", (double)totalSize/1024/1024/(end-start)*1000)));
-        }
-        catch (Exception e) {
-            // ignore
-        }
-
-        return result;
     }
 
     @Override
@@ -101,22 +44,29 @@ public class ThroughputTask extends PeriodicTask<ThroughputTaskParameters, Throu
             return;
         }
 
-        JSONObject json = new JSONObject();
-        JSONArray results = new JSONArray();
+        int fileSizeMB = (int) (mParameters.minFileSizeMB + Math.random() * (mParameters.maxFileSizeMB - mParameters.minFileSizeMB));
+        String url = null;
+        try {
+            url = String.format(mParameters.urlFormat, fileSizeMB);
+        }
+        catch (Exception e) {
+            Log.e(TAG, "Failed to compose download url.", e);
+            startOneShot(mParameters.minIntervalSec);
+            return;
+        }
 
+        JSONObject json = new JSONObject();
         json.put(Logger.KEY_ACTION, ACTION);
 
-        for (String url: parameters.urls) {
-            if (!Utils.hasNetworkConnection(mContext)) {
-                break;
-            }
-            Log.d(TAG, "Try downloading " + url);
-            results.put(download(url));
-        }
-        json.put("results", results);
+        Log.d(TAG, "Try downloading " + url);
+        LocalUtils.testThroughput(url, json);
 
         Log.i(TAG, json.toString());
         mLogger.log(json);
+
+        long nextInterval = (long) (mParameters.minIntervalSec + Math.random() * (mParameters.maxIntervalSec - mParameters.minIntervalSec));
+        Log.d(TAG, "Schedule next download in " + nextInterval + " seconds.");
+        startOneShot(nextInterval);
     }
 
     @Override
@@ -149,29 +99,37 @@ public class ThroughputTask extends PeriodicTask<ThroughputTaskParameters, Throu
 @Root(name = "ThroughputTask")
 class ThroughputTaskParameters extends PeriodicParameters {
 
-    @ElementList
-    List<String> urls;
+    @Element
+    Long maxIntervalSec;
 
     @Element
-    Integer connectionTimeoutSec;
+    Long minIntervalSec;
 
     @Element
-    Integer readTimeoutSec;
+    Integer maxFileSizeMB;
+
+    @Element
+    Integer minFileSizeMB;
+
+    @Element
+    String urlFormat;
 
     public ThroughputTaskParameters() {
         checkIntervalSec = 300L;
-
-        connectionTimeoutSec = 10;
-        readTimeoutSec = 10;
-
-        urls = new ArrayList<String>();
+        maxIntervalSec = 900L;
+        minIntervalSec = 300L;
+        maxFileSizeMB = 100;
+        minFileSizeMB = 50;
+        urlFormat = "http://192.168.1.1:8080/downloads/test-%dM.bin";
     }
 
     public ThroughputTaskParameters(ThroughputTaskParameters params) {
         super(params);
-        this.urls = new ArrayList<String>(params.urls);
-        this.connectionTimeoutSec = params.connectionTimeoutSec;
-        this.readTimeoutSec = params.readTimeoutSec;
+        this.maxIntervalSec = params.maxIntervalSec;
+        this.minIntervalSec = params.minIntervalSec;
+        this.maxFileSizeMB = params.maxFileSizeMB;
+        this.minFileSizeMB = params.minFileSizeMB;
+        this.urlFormat = params.urlFormat;
     }
 }
 
