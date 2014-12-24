@@ -20,7 +20,7 @@ public class SnifferService extends Service {
 
     public static final String BASE_URL = "http://pocketsniffer.phone-lab.org";
 
-    public static final String DEFAULT_MANIFEST_URL = BASE_URL + "/manifest/";
+    public static final String DEFAULT_MANIFEST_URL = BASE_URL + "/backend/manifest/";
 
     public static final String MANIFEST_SERVICE_INTENT = "edu.buffalo.cse.pocketsniffer.services.ManifestService";
     public static final String UPLOADER_SERVICE_INTENT = "edu.buffalo.cse.pocketsniffer.services.UploaderService";
