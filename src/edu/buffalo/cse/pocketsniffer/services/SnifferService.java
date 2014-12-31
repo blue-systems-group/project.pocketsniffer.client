@@ -36,7 +36,6 @@ public class SnifferService extends Service {
         "edu.buffalo.cse.pocketsniffer.tasks.ScanResultTask",
         "edu.buffalo.cse.pocketsniffer.tasks.ServerTask",
         "edu.buffalo.cse.pocketsniffer.tasks.BuildInfoTask",
-        "edu.buffalo.cse.pocketsniffer.tasks.ProximityTask"
     };
 
     private Map<String, PeriodicTask> mTasks;
