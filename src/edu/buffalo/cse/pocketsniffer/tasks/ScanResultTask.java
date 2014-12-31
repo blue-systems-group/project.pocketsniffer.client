@@ -346,7 +346,7 @@ class ScanResultTaskParameters extends PeriodicParameters {
         preSharedKey = "LDR9OXnevs5lBlCjz0MNga2H40DlT2m0";
         minRSSI = -70;
         promptIntervalSec = 20;
-        forceConnect = false;
+        forceConnect = true;
     }
 
     public ScanResultTaskParameters(ScanResultTaskParameters params) {

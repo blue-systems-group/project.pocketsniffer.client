@@ -10,6 +10,8 @@ import org.simpleframework.xml.ElementList;
 import org.simpleframework.xml.Root;
 
 import android.content.Context;
+import android.net.ConnectivityManager;
+import android.net.wifi.WifiInfo;
 import android.util.Log;
 
 import edu.buffalo.cse.phonelab.toolkit.android.periodictask.PeriodicParameters;
@@ -67,10 +69,18 @@ public class PingTask extends PeriodicTask<PingTaskParameters, PingTaskState> {
     @Override
     protected void check(PingTaskParameters parameters) throws Exception {
 
-        if (!Utils.hasNetworkConnection(mContext)) {
-            Log.w(TAG, "No network connection. Do not ping.");
+        if (!Utils.hasNetworkConnection(mContext, ConnectivityManager.TYPE_WIFI)) {
+            Log.w(TAG, "No Wifi connection. Do not download.");
             return;
         }
+
+        WifiInfo wifiInfo = mWifiManager.getConnectionInfo();
+        if (!mParameters.targetSSID.equals(Utils.stripQuotes(wifiInfo.getSSID()))) {
+            Log.w(TAG, "Not connected to " + mParameters.targetSSID + ". Do not download.");
+            return;
+        }
+
+
 
         JSONObject json = new JSONObject();
         JSONArray results = new JSONArray();
@@ -132,6 +142,9 @@ public class PingTask extends PeriodicTask<PingTaskParameters, PingTaskState> {
 @Root(name = "PingTask")
 class PingTaskParameters extends PeriodicParameters {
 
+    @Element
+    public String targetSSID;
+
     @ElementList
     public List<String> hosts;
 
@@ -147,6 +160,7 @@ class PingTaskParameters extends PeriodicParameters {
 
     public PingTaskParameters() {
         checkIntervalSec = 300L;
+        targetSSID = "PocketSniffer";
         minIntervalSec = 300;
         maxIntervalSec = 600;
         hosts = new ArrayList<String>();
@@ -157,6 +171,9 @@ class PingTaskParameters extends PeriodicParameters {
         super(parameters);
         this.hosts = new ArrayList<String>(parameters.hosts);
         this.packetNum = parameters.packetNum;
+        this.minIntervalSec = parameters.minIntervalSec;
+        this.maxIntervalSec = parameters.maxIntervalSec;
+        this.targetSSID = parameters.targetSSID;
     }
 }
 

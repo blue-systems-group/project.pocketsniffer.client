@@ -3,6 +3,8 @@ package edu.buffalo.cse.pocketsniffer.utils;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -26,8 +28,12 @@ public class LocalUtils {
         return (new File("/system/bin/iperf")).exists() || (new File("/system/xbin/iperf")).exists();
     }
 
-    public static JSONObject iperfTest(String host, int port, int sizeMB) throws JSONException {
+    public static JSONObject iperfTest(String host, int port, boolean udp, int sizeMB) throws JSONException {
         JSONObject entry = new JSONObject();
+
+        entry.put("host", host);
+        entry.put("port", port);
+        entry.put("type", udp? "UDP": "TCP");
 
         if (!isIperfAvailable()) {
             entry.put("success", false);
@@ -37,14 +43,14 @@ public class LocalUtils {
         List<String> cmd = new ArrayList<String>();
 
         cmd.add("iperf");
-        cmd.add("-c");
-        cmd.add(host);
-        cmd.add("-p");
-        cmd.add(port + "");
-        cmd.add("-i");
-        cmd.add("1");
-        cmd.add("-n");
-        cmd.add(sizeMB + "M");
+        cmd.add("-c"); cmd.add(host);
+        cmd.add("-p"); cmd.add(port + "");
+        cmd.add("-i"); cmd.add("1");
+        cmd.add("-n"); cmd.add(sizeMB + "M");
+        if (udp) {
+            cmd.add("-u");
+            cmd.add("-b"); cmd.add("72M");
+        }
 
         long start = 0, end = 0;
 
@@ -72,52 +78,75 @@ public class LocalUtils {
             return entry;
         }
 
-        List<Double> throughputs = new ArrayList<Double>();
-        double overallThroughputs = 0;
-        double duration = (double) (end - start) / 1000;
+        double duration = end - start;
+        entry.put("success", true);
+        entry.put("fileSizeBytes", sizeMB*MB);
+        entry.put("durationMs", duration);
 
-        for (String line : output.split("\n")) {
-            Log.d(TAG, "Parsing " + line);
-            if (!line.endsWith("sec")) {
-                continue;
+        if (!udp) {
+            List<Double> throughputs = new ArrayList<Double>();
+            double overallThroughputs = 0;
+
+            for (String line : output.split("\n")) {
+                Log.d(TAG, "Parsing " + line);
+                if (!line.endsWith("sec")) {
+                    continue;
+                }
+                String[] parts = line.split("\\s");
+                double bw = Double.parseDouble(parts[parts.length-2]);
+                throughputs.add(bw);
+                overallThroughputs = bw;
             }
-            String[] parts = line.split(" ");
-            double bw = Double.parseDouble(parts[parts.length-2]);
-            throughputs.add(bw);
-            overallThroughputs = bw;
-        }
-        throughputs.remove(throughputs.size() - 1);
+            throughputs.remove(throughputs.size() - 1);
 
-        double min = -1, max = -1, mean = 0;
-        for (double d : throughputs) {
-            if (min == -1 || d < min) {
-                min = d;
+            double min = -1, max = -1, mean = 0;
+            for (double d : throughputs) {
+                if (min == -1 || d < min) {
+                    min = d;
+                }
+                if (max == -1 || d > max) {
+                    max = d;
+                }
+                mean += d;
             }
-            if (max == -1 || d > max) {
-                max = d;
+            mean /= throughputs.size();
+
+            double stdDev = 0;
+            for (double d : throughputs) {
+                stdDev += Math.pow(d-mean, 2);
             }
-            mean += d;
-        }
-        mean /= throughputs.size();
+            stdDev /= throughputs.size();
+            stdDev = Math.sqrt(stdDev);
 
-        double stdDev = 0;
-        for (double d : throughputs) {
-            stdDev += Math.pow(d-mean, 2);
+            entry.put("throughputMbps", overallThroughputs);
+            entry.put("maxThroughput", max);
+            entry.put("minThroughput", min);
+            entry.put("stdDev", stdDev);
         }
-        stdDev /= throughputs.size();
-        stdDev = Math.sqrt(stdDev);
-
-        try {
-            entry.put("success", true);
-            entry.put("fileSizeBytes", sizeMB*MB);
-            entry.put("durationMs", duration);
-            entry.put("throughputMbps", Double.valueOf(String.format("%.2f", overallThroughputs)));
-            entry.put("maxThroughput", Double.valueOf(String.format("%.2f", max)));
-            entry.put("minThroughput", Double.valueOf(String.format("%.2f", min)));
-            entry.put("stdDev", Double.valueOf(String.format("%.2f", stdDev)));
-        }
-        catch (Exception e) {
-            Log.e(TAG, "Failed to put download stats.", e);
+        else {
+            for (String line : output.split("\n")) {
+                Log.d(TAG, "Parsing " + line);
+                if (!line.endsWith("%)")) {
+                    continue;
+                }
+                double bytes, bw, jitter;
+                Pattern pattern = Pattern.compile("([\\d\\.]+)\\sMBytes\\s*([\\d\\.]+)\\sMbits/sec\\s*([\\d\\.]+)\\sms");
+                Matcher matcher = pattern.matcher(line);
+                if (matcher.find()) {
+                    Log.d(TAG, "Match found.");
+                    bytes = Double.parseDouble(matcher.group(1));
+                    bw = Double.parseDouble(matcher.group(2));
+                    jitter = Double.parseDouble(matcher.group(3));
+                    entry.put("actualBytes", bytes);
+                    entry.put("throughputMbps", bw);
+                    entry.put("jitter", jitter);
+                }
+                else {
+                    Log.d(TAG, "Match not found.");
+                    entry.put("success", false);
+                }
+                break;
+            }
         }
 
         return entry;
