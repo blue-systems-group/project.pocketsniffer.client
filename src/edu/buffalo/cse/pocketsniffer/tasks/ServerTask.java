@@ -12,7 +12,9 @@ import java.net.URL;
 import java.net.URLConnection;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -20,7 +22,11 @@ import org.json.JSONObject;
 import org.simpleframework.xml.Element;
 import org.simpleframework.xml.Root;
 
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.net.ConnectivityManager;
 import android.net.wifi.ScanResult;
 import android.net.wifi.WifiConfiguration;
@@ -32,6 +38,8 @@ import edu.buffalo.cse.phonelab.toolkit.android.periodictask.PeriodicParameters;
 import edu.buffalo.cse.phonelab.toolkit.android.periodictask.PeriodicState;
 import edu.buffalo.cse.phonelab.toolkit.android.periodictask.PeriodicTask;
 import edu.buffalo.cse.phonelab.toolkit.android.utils.Utils;
+import edu.buffalo.cse.pocketsniffer.interfaces.DeviceInfo;
+import edu.buffalo.cse.pocketsniffer.ui.DeviceFragment;
 import edu.buffalo.cse.pocketsniffer.utils.LocalUtils;
 
 public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskState> {
@@ -43,8 +51,37 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
 
     private SnifTask mSnifTask;
 
+    private Map<String, DeviceInfo> mInterestedDevices;
+    private BroadcastReceiver mInterestedDeviceReceiver = new BroadcastReceiver() {
+
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            Log.d(TAG, "Intent fired, action is " + intent.getAction());
+            parseInterestedDevices(intent.getStringExtra(DeviceFragment.EXTRA_INTERESTED_DEVICES));
+        }
+    };
+
     public ServerTask(Context context) {
         super(context, ServerTask.class.getSimpleName());
+        
+        mInterestedDevices = new HashMap<String, DeviceInfo>();
+        mContext.registerReceiver(mInterestedDeviceReceiver, new IntentFilter(DeviceFragment.ACTION_INTERESTED_DEVICE_CHANGED));
+
+        SharedPreferences sharedPreferences = mContext.getSharedPreferences(DeviceFragment.PREFERENCES_NAME, Context.MODE_PRIVATE);
+        parseInterestedDevices(sharedPreferences.getString(DeviceFragment.KEY_INTERESTED_DEVICES, "[]"));
+    }
+
+    private void parseInterestedDevices(String s) {
+        try {
+            JSONArray array = new JSONArray(s);
+            for (int i = 0; i < array.length(); i++) {
+                DeviceInfo info = DeviceInfo.fromJSONObject(array.getJSONObject(i));
+                mInterestedDevices.put(info.mac, info);
+            }
+        }
+        catch (Exception e) {
+            Log.e(TAG, "Failed to parse device info list.", e);
+        }
     }
 
     public void startServerThread() {
@@ -324,6 +361,119 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
             }
         }
 
+        private void collectTraffic(JSONObject request, JSONObject reply) throws JSONException, Exception {
+            if (!Utils.isPhoneLabDevice(mContext)) {
+                Log.w(TAG, "Not PhoneLab devices, ignoring traffic request.");
+                return;
+            }
+
+            JSONArray targetDevices = request.optJSONArray("clients");
+            if (targetDevices == null) {
+                Log.w(TAG, "No target devices specified for traffic.");
+                return;
+            }
+
+            JSONArray forDevices = new JSONArray();
+            for (int i = 0; i < targetDevices.length(); i++) {
+                String mac = targetDevices.getString(i);
+                if (!mInterestedDevices.containsKey(mac)) {
+                    Log.d(TAG, "Device " + mac + " is not configured.");
+                    continue;
+                }
+                DeviceInfo info = mInterestedDevices.get(mac);
+                if (!info.interested) {
+                    Log.d(TAG, "Device " + mac + " is not interested.");
+                    continue;
+                }
+                forDevices.put(mac);
+            }
+
+            if (forDevices.length() == 0) {
+                Log.d(TAG, "All target devices are not interested.");
+                return;
+            }
+            Log.d(TAG, "Collecting traffic condition.");
+
+            SnifTask.Params params = new SnifTask.Params();
+            if (request.has("trafficChannel")) {
+                JSONArray channels = request.getJSONArray("trafficChannel");
+                for (int i = 0; i < channels.length(); i++) {
+                    params.channels.add(channels.getInt(i));
+                }
+            }
+            else {
+                params.channels.add(1);
+                params.channels.add(6);
+                params.channels.add(11);
+            }
+            params.durationSec = request.optInt("channelDwellTime", 10);
+            params.packetCount = -1;
+            params.forever = false;
+
+            mSnifTask = new SnifTask(mContext, null);
+            mSnifTask.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, params);
+
+            JSONObject result = mSnifTask.get().toJSONObject();
+            result.put("forDevices", forDevices);
+
+            JSONArray array = new JSONArray();
+            array.put(result);
+            reply.put("clientTraffic", array);
+            mSnifTask = null;
+
+            Log.d(TAG, "Waiting for Wifi connection.");
+            while (!Utils.hasNetworkConnection(mContext, ConnectivityManager.TYPE_WIFI)) {
+                Thread.sleep(5);
+            }
+        }
+
+        private void collectLatency(JSONObject request, JSONObject reply) throws JSONException, Exception {
+            if (!request.has("hosts")) {
+                Log.d(TAG, "No hosts specified for latency test. Ignoring.");
+                return;
+            }
+            JSONArray hosts = request.getJSONArray("hosts");
+            JSONArray results = new JSONArray();
+            for (int i = 0; i < hosts.length(); i++) {
+                String host = hosts.getString(i);
+                JSONObject entry = new JSONObject();
+                entry.put("timestamp", Utils.getDateTimeString());
+                entry.put("MAC", Utils.getMacAddress("wlan0"));
+                entry.put("host", host);
+
+                List<String> cmd = new ArrayList<String>();
+                cmd.add("ping");
+                cmd.add("-c");
+                cmd.add("10");
+                cmd.add(host);
+                Log.d(TAG, "Ping " + host + " ...");
+                String output = (String) Utils.call(cmd, -1 /* no timeout*/, false /* do not require su */)[1];
+                parsePingOutput(output, entry);
+
+                results.put(entry);
+            }
+            reply.put("clientLatency", results);
+        }
+
+        private void collectThroughput(JSONObject request, JSONObject reply) throws JSONException, Exception {
+            if (!request.has("urls")) {
+                Log.d(TAG, "No urls specified for throughput test. Ignoring.");
+                return;
+            }
+            JSONArray urls = request.getJSONArray("urls");
+            JSONArray results = new JSONArray();
+            for (int i = 0; i < urls.length(); i++) {
+                String url = urls.getString(i);
+                JSONObject entry = new JSONObject();
+                entry.put("timestamp", Utils.getDateTimeString());
+                entry.put("MAC", Utils.getMacAddress("wlan0"));
+                entry.put("url", url);
+                tryDownload(url, entry);
+                results.put(entry);
+            }
+            reply.put("clientThroughput", results);
+        }
+
         private void handleCollect(JSONObject request, JSONObject reply) throws JSONException, Exception {
 
             if (request.optBoolean("phonelabDevice", false)) {
@@ -342,90 +492,15 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
             }
 
             if (request.optBoolean("clientTraffic", false)) {
-                if (!Utils.isPhoneLabDevice(mContext)) {
-                    Log.w(TAG, "Not PhoneLab devices, ignoring traffic request.");
-                }
-                else {
-                    Log.d(TAG, "Collecting traffic condition.");
-
-                    SnifTask.Params params = new SnifTask.Params();
-                    if (request.has("trafficChannel")) {
-                        JSONArray channels = request.getJSONArray("trafficChannel");
-                        for (int i = 0; i < channels.length(); i++) {
-                            params.channels.add(channels.getInt(i));
-                        }
-                    }
-                    else {
-                        params.channels.add(1);
-                        params.channels.add(6);
-                        params.channels.add(11);
-                    }
-                    params.durationSec = request.optInt("channelDwellTime", 30);
-                    params.packetCount = -1;
-                    params.forever = false;
-
-                    mSnifTask = new SnifTask(mContext, null);
-                    mSnifTask.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, params);
-
-                    JSONArray array = new JSONArray();
-                    array.put(mSnifTask.get().toJSONObject());
-                    reply.put("clientTraffic", array);
-                    mSnifTask = null;
-
-                    Log.d(TAG, "Waiting for Wifi connection.");
-                    while (!Utils.hasNetworkConnection(mContext, ConnectivityManager.TYPE_WIFI)) {
-                        Thread.sleep(5);
-                    }
-                }
+                collectTraffic(request, reply);
             }
 
             if (request.optBoolean("clientLatency", false)) {
-                if (!request.has("hosts")) {
-                    Log.d(TAG, "No hosts specified for latency test. Ignoring.");
-                }
-                else {
-                    JSONArray hosts = request.getJSONArray("hosts");
-                    JSONArray results = new JSONArray();
-                    for (int i = 0; i < hosts.length(); i++) {
-                        String host = hosts.getString(i);
-                        JSONObject entry = new JSONObject();
-                        entry.put("timestamp", Utils.getDateTimeString());
-                        entry.put("MAC", Utils.getMacAddress("wlan0"));
-                        entry.put("host", host);
-
-                        List<String> cmd = new ArrayList<String>();
-                        cmd.add("ping");
-                        cmd.add("-c");
-                        cmd.add("10");
-                        cmd.add(host);
-                        Log.d(TAG, "Ping " + host + " ...");
-                        String output = (String) Utils.call(cmd, -1 /* no timeout*/, false /* do not require su */)[1];
-                        parsePingOutput(output, entry);
-
-                        results.put(entry);
-                    }
-                    reply.put("clientLatency", results);
-                }
+                collectLatency(request, reply);
             }
 
             if (request.optBoolean("clientThroughput", false)) {
-                if (!request.has("urls")) {
-                    Log.d(TAG, "No urls specified for throughput test. Ignoring.");
-                }
-                else {
-                    JSONArray urls = request.getJSONArray("urls");
-                    JSONArray results = new JSONArray();
-                    for (int i = 0; i < urls.length(); i++) {
-                        String url = urls.getString(i);
-                        JSONObject entry = new JSONObject();
-                        entry.put("timestamp", Utils.getDateTimeString());
-                        entry.put("MAC", Utils.getMacAddress("wlan0"));
-                        entry.put("url", url);
-                        tryDownload(url, entry);
-                        results.put(entry);
-                    }
-                    reply.put("clientThroughput", results);
-                }
+                collectThroughput(request, reply);
             }
         }
 

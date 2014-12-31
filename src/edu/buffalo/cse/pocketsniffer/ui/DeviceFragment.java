@@ -4,17 +4,18 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.json.JSONArray;
-import org.json.JSONException;
 
+import android.app.AlertDialog;
 import android.app.Fragment;
-import android.app.ProgressDialog;
-import android.bluetooth.BluetoothAdapter;
-import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
-import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.text.format.DateUtils;
 import android.util.Log;
@@ -23,100 +24,89 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.BaseAdapter;
+import android.widget.Button;
 import android.widget.CheckBox;
+import android.widget.EditText;
 import android.widget.ListView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import edu.buffalo.cse.pocketsniffer.R;
-import edu.buffalo.cse.pocketsniffer.interfaces.Refreshable;
-import edu.buffalo.cse.pocketsniffer.tasks.ProximityTask;
-import edu.buffalo.cse.pocketsniffer.tasks.ProximityTask.BluetoothDeviceInfo;
+import edu.buffalo.cse.pocketsniffer.interfaces.DeviceInfo;
 import edu.buffalo.cse.pocketsniffer.utils.LocalUtils;
+import edu.buffalo.cse.pocketsniffer.utils.OUI;
 
 
-public class DeviceFragment extends Fragment implements Refreshable {
+public class DeviceFragment extends Fragment {
 
     private static final String TAG = LocalUtils.getTag(DeviceFragment.class);
 
     public static final String ACTION_INTERESTED_DEVICE_CHANGED = DeviceFragment.class.getName() + ".InterestedDeviceChanged";
-    public static final String EXTRA_DEVICE_MAC = DeviceFragment.class.getName() + ".DeviceMAC";
-    public static final String EXTRA_IS_INTERESTED = DeviceFragment.class.getName() + ".IsInterested";
+    public static final String EXTRA_INTERESTED_DEVICES = DeviceFragment.class.getName() + ".InterestedDevices";
+
+    public static final String PREFERENCES_NAME = DeviceFragment.class.getName() + ".Preferences";
+    public static final String KEY_INTERESTED_DEVICES = DeviceFragment.class.getName() + ".InterestedDevices";
 
     private static final String PROXIMITYTASK_CHECK_INTENT_NAME = "edu.buffalo.cse.pocketsniffer.tasks.ProximityTask.Check";
 
-    private List<BluetoothDeviceInfo> mListData;
+    private List<DeviceInfo> mListData;
     private ListViewAdapter mAdapter;
     private LayoutInflater mInflater;
     private Context mContext;
-    private ProgressDialog mDialog;
 
-    private BroadcastReceiver mBluetoothReceiver = new BroadcastReceiver() {
 
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            String action = intent.getAction();
+    private ReentrantLock mPreferenceLock;
+    private SharedPreferences mSharedPreferences;
 
-            Log.d(TAG, "Intent fired, action is " + action);
-
-            if (BluetoothAdapter.ACTION_DISCOVERY_FINISHED.equals(action)) {
-                mDialog.dismiss();
-            }
-            else if (ProximityTask.ACTION_NEIGHBOR_UPDATED.equals(action)) {
-                updateListData(intent);
-            }
-        }
-    };
-
-    private void startDiscovery() {
-        mContext.sendBroadcast(new Intent(PROXIMITYTASK_CHECK_INTENT_NAME));
-    }
+    private Button mAddDeviceButton;
+    private View mAddDeviceDialogView;
+    private AlertDialog mAddDeviceDialog;
+    private EditText mDeviceNameEditText;
+    private EditText mMacAddressEditText;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        mListData = new ArrayList<BluetoothDeviceInfo>();
-        mAdapter = new ListViewAdapter();
         mContext = getActivity();
+        mPreferenceLock = new ReentrantLock();
+
+        mAdapter = new ListViewAdapter();
         mInflater = (LayoutInflater) mContext.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
 
-        mDialog = new ProgressDialog(mContext);
-        mDialog.setCancelable(false);
-        mDialog.setCanceledOnTouchOutside(false);
-        mDialog.setMessage("Scanning...");
+        mSharedPreferences = mContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE);
 
-        refresh();
+        mAddDeviceDialogView = mInflater.inflate(R.layout.add_device_dialog, null);
+        mDeviceNameEditText = (EditText) mAddDeviceDialogView.findViewById(R.id.deviceNameEditText);
+        mMacAddressEditText = (EditText) mAddDeviceDialogView.findViewById(R.id.macAddressEditText);
 
-        IntentFilter filter = new IntentFilter();
-        filter.addAction(ProximityTask.ACTION_NEIGHBOR_UPDATED);
-        filter.addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED);
-        mContext.registerReceiver(mBluetoothReceiver, filter);
+        AlertDialog.Builder builder = new AlertDialog.Builder(mContext, AlertDialog.THEME_HOLO_LIGHT);
+
+        builder.setTitle("Add an interested device");
+        builder.setView(mAddDeviceDialogView);
+        builder.setPositiveButton("Add", new DialogInterface.OnClickListener() {
+
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+            }
+        });
+        builder.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                dialog.dismiss();
+            }
+        });
+        mAddDeviceDialog = builder.create();
+
+        recoverDeviceList();
     }
 
 
-    private void updateListData(Intent intent) {
-        mListData = new ArrayList<BluetoothDeviceInfo>();
-
-        try {
-            JSONArray array = new JSONArray(intent.getStringExtra(ProximityTask.EXTRA_NEIGHBOR_DEVICES));
-            for (int i = 0; i < array.length(); i++) {
-                try {
-                    mListData.add(BluetoothDeviceInfo.fromJSONObject(array.getJSONObject(i)));
-                }
-                catch (JSONException e) {
-                    Log.e(TAG, "Failed to decode bluetooth device info.", e);
-                }
-            }
-        }
-        catch (Exception e) {
-            Log.e(TAG, "Failed to parse neighbor info.", e);
-            return;
-        }
-
-        Collections.sort(mListData, new Comparator<BluetoothDeviceInfo>() {
+    private void updateListData() {
+        Collections.sort(mListData, new Comparator<DeviceInfo>() {
 
             @Override
-            public int compare(BluetoothDeviceInfo lhs, BluetoothDeviceInfo rhs) {
+            public int compare(DeviceInfo lhs, DeviceInfo rhs) {
                 if (lhs.interested != rhs.interested) {
                     return lhs.interested? -1: 1;
                 }
@@ -129,24 +119,106 @@ public class DeviceFragment extends Fragment implements Refreshable {
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
             Bundle savedInstanceState) {
-        View view = inflater.inflate(R.layout.device, container, false);
+        View view = inflater.inflate(R.layout.device, null);
         ListView lv = (ListView) view.findViewById(R.id.deviceListView);
         lv.setAdapter(mAdapter);
         lv.setOnItemClickListener(mAdapter);
 
+        mAddDeviceButton = (Button) view.findViewById(R.id.addDevice);
+        mAddDeviceButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Log.d(TAG, "Add device button clicked.");
+                mDeviceNameEditText.setText("");
+                mMacAddressEditText.setText("");
+                mAddDeviceDialog.show();
+                mAddDeviceDialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(new View.OnClickListener() {
+
+                    @Override
+                    public void onClick(View view) {
+                        if (mDeviceNameEditText.getText().length() == 0) {
+                            Toast.makeText(mContext, "Device name can not be empty.", Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+                        if (mMacAddressEditText.getText().length() == 0) {
+                            Toast.makeText(mContext, "Mac address can not be empty.", Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+                        String deviceName = mDeviceNameEditText.getText().toString().trim();
+                        String mac = mMacAddressEditText.getText().toString().trim();
+
+                        Pattern pattern = Pattern.compile("([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}");
+                        Matcher matcher = pattern.matcher(mac);
+                        if (!matcher.matches()) {
+                            Toast.makeText(mContext, "Mac address is not valid.", Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+                        DeviceInfo info = new DeviceInfo();
+                        info.name = deviceName;
+                        info.mac = mac.toLowerCase();
+                        info.manufacturer = OUI.lookup(mac)[0];
+                        info.lastSeen = 0L;
+                        info.rssi = -1;
+                        info.interested = true;
+
+                        mListData.add(info);
+                        updateListData();
+                        mAddDeviceDialog.dismiss();
+
+                        persistDeviceList(true);
+                    }
+                });
+            }
+        });
         return view;
+    }
+
+    private void persistDeviceList(boolean broadcast) {
+        String extra = null;
+        synchronized (mPreferenceLock) {
+            try {
+                JSONArray array = new JSONArray();
+                for (DeviceInfo info : mListData) {
+                    array.put(info.toJSONObject());
+                }
+                SharedPreferences.Editor editor = mSharedPreferences.edit();
+                extra = array.toString();
+                editor.putString(KEY_INTERESTED_DEVICES, extra);
+                editor.commit();
+            }
+            catch (Exception e) {
+                Log.e(TAG, "Failed to commit changes.", e);
+                return;
+            }
+        }
+        if (broadcast) {
+            Intent intent = new Intent(ACTION_INTERESTED_DEVICE_CHANGED);
+            intent.putExtra(EXTRA_INTERESTED_DEVICES, extra);
+            mContext.sendBroadcast(intent);
+        }
+    }
+
+    private void recoverDeviceList() {
+        mListData = new ArrayList<DeviceInfo>();
+        synchronized (mPreferenceLock) {
+            try {
+                String s = mSharedPreferences.getString(KEY_INTERESTED_DEVICES, "[]");
+                JSONArray array = new JSONArray(s);
+                for (int i = 0; i < array.length(); i++) {
+                    DeviceInfo info = DeviceInfo.fromJSONObject(array.getJSONObject(i));
+                    mListData.add(info);
+                }
+            }
+            catch (Exception e) {
+                Log.d(TAG, "Failed to recover device list.");
+            }
+        }
     }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
-        mContext.unregisterReceiver(mBluetoothReceiver);
-    }
-
-    @Override
-    public void refresh() {
-        startDiscovery();
-        mDialog.show();
+        persistDeviceList(false);
     }
 
     @Override
@@ -176,13 +248,13 @@ public class DeviceFragment extends Fragment implements Refreshable {
             if (convertView == null) {
                 convertView = mInflater.inflate(R.layout.device_list_item, null);
             }
-            BluetoothDeviceInfo info = mListData.get(position);
+            DeviceInfo info = mListData.get(position);
 
             TextView tv = (TextView) convertView.findViewById(R.id.deviceName);
             tv.setText(info.name);
 
             tv = (TextView) convertView.findViewById(R.id.deviceMac);
-            tv.setText("Bluetooth MAC: " + info.mac);
+            tv.setText("MAC: " + info.mac);
 
             tv = (TextView) convertView.findViewById(R.id.deviceRSSI);
             tv.setText("Signal Strength: " + info.rssi + " dBm");
@@ -196,15 +268,11 @@ public class DeviceFragment extends Fragment implements Refreshable {
             checkBox.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) {
                     CheckBox cb = (CheckBox) v;
-                    BluetoothDeviceInfo i = (BluetoothDeviceInfo) cb.getTag();
+                    DeviceInfo i = (DeviceInfo) cb.getTag();
                     i.interested = cb.isChecked();
 
                     Log.d(TAG, "Button for " +  i.mac + " clicked, checked = " + cb.isChecked());
-
-                    Intent intent = new Intent(ACTION_INTERESTED_DEVICE_CHANGED);
-                    intent.putExtra(EXTRA_IS_INTERESTED, cb.isChecked());
-                    intent.putExtra(EXTRA_DEVICE_MAC, i.mac);
-                    mContext.sendBroadcast(intent);
+                    persistDeviceList(true);
                 }
             });
 
@@ -214,13 +282,11 @@ public class DeviceFragment extends Fragment implements Refreshable {
         @Override
         public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
             CheckBox checkBox = (CheckBox) parent.findViewById(R.id.interested);
-            String mac = mListData.get(position).mac;
-            Log.d(TAG, "Button for " +  mac + " clicked, checked = " + checkBox.isChecked());
+            DeviceInfo info = mListData.get(position);
+            Log.d(TAG, "Button for " +  info.mac + " clicked, checked = " + checkBox.isChecked());
 
-            Intent intent = new Intent(ACTION_INTERESTED_DEVICE_CHANGED);
-            intent.putExtra(EXTRA_IS_INTERESTED, checkBox.isChecked());
-            intent.putExtra(EXTRA_DEVICE_MAC, mac);
-            mContext.sendBroadcast(intent);
+            info.interested = checkBox.isChecked();
+            persistDeviceList(true);
         }
     }
 }
