@@ -1,2 +1,28 @@
 #!/usr/bin/env bash
-adb shell am startservice --user 0 edu.buffalo.cse.pocketsniffer/.services.SnifferService
+
+if [ "$1" == "devices" ]; then
+    adb devices
+    exit 0
+fi
+
+if [ $# -eq 1 ]; then
+    DEVICE=
+    COMMAND=$1
+elif [ $# -eq 3 ]; then
+    DEVICE="-s $2"
+    COMMAND=$3
+else
+    echo "Usage: $0 [-s device] command"
+    exit 0
+fi
+
+case $COMMAND in
+    start)      adb $DEVICE shell am startservice --user 0 edu.buffalo.cse.pocketsniffer/.services.SnifferService ;;
+    bench)      adb $DEVICE shell am startservice --user 0 edu.buffalo.cse.pocketsniffer/.services.BenchService ;;
+    download)   adb $DEVICE shell am broadcast -a edu.buffalo.cse.pocketsniffer.tasks.ThroughputTask.Check ;;
+    manifest)   adb $DEVICE shell am broadcast -a edu.buffalo.cse.pocketsniffer.ManifestTask.Check ;;
+    ping)       adb $DEVICE shell am broadcast -a edu.buffalo.cse.pocketsniffer.tasks.PingTask.Check ;;
+    proximity)  adb $DEVICE shell am broadcast -a edu.buffalo.cse.pocketsniffer.tasks.ProximityTask.Check ;;
+    snif)       adb $DEVICE shell am broadcast -a edu.buffalo.cse.pocketsniffer.SnifferService.Snif ;;
+    upload)     adb $DEVICE shell am broadcast -a edu.buffalo.cse.pocketsniffer.UploaderTask.Check ;;
+esac
