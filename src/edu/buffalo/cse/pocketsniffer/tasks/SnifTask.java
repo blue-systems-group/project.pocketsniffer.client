@@ -74,41 +74,29 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
      * This function get called on each packet.
      */
     private void gotPacket(Packet pkt) {
-        if (!pkt.crcOK) {
+        String src = pkt.addr2;
+
+        if (src == null) {
             return;
         }
 
-        String from = pkt.addr2;
-        String to = pkt.addr1;
-
-        // only count data packets for non-broadcast data traffic volumns
-        if (pkt.type != FRAME_TYPE_DATA || !(pkt.subtype == FRAME_SUBTYPE_DATA || pkt.subtype == FRAME_SUBTYPE_QOS_DATA)
-                || from == null || to == null || to.equals(BROADCAST_MAC)) {
-            return;
-        }
-
-        from = from.toLowerCase();
-        to = to.toLowerCase();
+        src = src.toLowerCase();
 
         TrafficEntry entry = null;
 
-        String key = TrafficEntry.getKey(from, to);
-        if (!mTrafficEntryCache.containsKey(key)) {
-            entry = new TrafficEntry(from, to);
+        if (!mTrafficEntryCache.containsKey(src)) {
+            entry = new TrafficEntry(src);
             entry.begin = Utils.getDateTimeString(pkt.tv_sec, pkt.tv_usec);
-            mTrafficEntryCache.put(key, entry);
+            mTrafficEntryCache.put(src, entry);
         }
         else {
-            entry = mTrafficEntryCache.get(key);
+            entry = mTrafficEntryCache.get(src);
         }
 
-        if (from == entry.from) {
-            entry.txBytes += pkt.len;
-            entry.putTxRSSI(pkt.rssi);
-        }
-        else {
-            entry.rxBytes += pkt.len;
-            entry.putRxRSSI(pkt.rssi);
+        entry.packets++;
+
+        if (pkt.retry) {
+            entry.retryPackets++;
         }
 
         entry.channel = Utils.freqToChannel(pkt.freq);
