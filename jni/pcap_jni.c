@@ -33,12 +33,11 @@ static obj_field_t g_packet_fields[] = {
     { .name = "tv_sec",     .type = "I" }, // 4
     { .name = "tv_usec",    .type = "I" }, // 5
     { .name = "len",        .type = "I" }, // 6
-    { .name = "addr1",      .type = "Ljava/lang/String;" }, // 8
+    { .name = "addr1",      .type = "Ljava/lang/String;" }, // 7
     { .name = "addr2",      .type = "Ljava/lang/String;" }, // 8
     { .name = "rssi",       .type = "I" }, // 9
     { .name = "freq",       .type = "I" }, // 10
-    { .name = "crcOK",      .type = "Z" }, // 11
-    // { .name = "SSID",       .type = "Ljava/lang/String;" }, // 12
+    { .name = "retry",      .type = "Z" }, // 11
 #define PACKET_FILED_NUM  12
 };
 
@@ -180,28 +179,9 @@ JNIEXPORT jboolean JNICALL Java_edu_buffalo_cse_pocketsniffer_tasks_SnifTask_par
         int_val = (jint) radiotap_hdr->channel_mhz;
         (*env)->SetIntField(env, packet, g_packet_fields[10].id, int_val);
 
-        // crcOK
-        COFFEE_TRY() {
-            bool_val = (jboolean) check_crc(pkt, pkt_len);
-        } COFFEE_CATCH() {
-            bool_val = false;
-            coffeecatch_cancel_pending_alarm();
-        } COFFEE_END();
-        (*env)->SetBooleanField(env, packet, g_packet_fields[11].id, bool_val);
-
-        // SSID (deprecated)
-        /*
-        if (FC_TYPE(dot11_hdr->frame_ctrl) == DOT11_TYPE_MGMT && FC_SUBTYPE(dot11_hdr->frame_ctrl) == DOT11_SUBTYPE_BEACON) {
-            if (get_ssid(pkt, pkt_len, buf, sizeof(buf)) >= 0) {
-                str_val = (*env)->NewStringUTF(env, buf);
-                (*env)->SetObjectField(env, packet, g_packet_fields[12].id, str_val);
-                (*env)->DeleteLocalRef(env, str_val);
-            }
-        }
-        else {
-            (*env)->SetObjectField(env, packet, g_packet_fields[12].id, NULL);
-        }
-        */
+        // retry
+        bool_val = (jboolean) FC_RETRY(dot11_hdr->frame_ctrl);
+        (*env)->SetBooleanField(env, packet, g_packet_fields[11].id, bool_val)
 
         (*env)->CallVoidMethod(env, this, g_got_pkt, packet);
     }
