@@ -12,87 +12,49 @@ import android.text.TextUtils;
  */
 public class TrafficEntry {
     public int channel;
-    public String from;
-    public String to;
-    public long txBytes;
-    public long rxBytes;
+    public String src;
+    public long packets;
+    public long retryPackets;
     public String begin;
     public String end;
 
-    private List<Integer> rxRSSI;
-    private List<Integer> txRSSI;
+    private List<Integer> rssi;
 
-    public TrafficEntry(String from, String to) {
-        this.from = from;
-        this.to = to;
-        txBytes = 0;
-        rxBytes = 0;
-        rxRSSI = new ArrayList<Integer>();
-        txRSSI = new ArrayList<Integer>();
+    public TrafficEntry(String src) {
+        this.src = src;
+        packets = 0L;
+        retryPackets = 0L;
+        rssi = new ArrayList<Integer>();
     }
 
-    public static String getKey(String from, String to) {
-        if (from.compareTo(to) < 0) {
-            return TextUtils.join("-", new String[]{from, to});
-        }
-        else {
-            return TextUtils.join("-", new String[]{to, from});
-        }
-    }
-
-    public String getKey() {
-        return TrafficEntry.getKey(this.from, this.to);
-    }
-
-    public void putRxRSSI(int rssi) {
-        rxRSSI.add(rssi);
+    public void putRSSI(int r) {
+        rssi.add(r);
     }
     
-    public void putTxRSSI(int rssi) {
-        txRSSI.add(rssi);
-    }
-
-    public int getAvgTxRSSI() {
+    public int getAvgRSSI() {
         int sum = 0;
-        for (int rssi : txRSSI) {
-            sum += rssi;
+        for (int r : rssi) {
+            sum += r;
         }
-        if (txRSSI.size() == 0) {
+        if (rssi.size() == 0) {
             return 0;
         }
         else {
-            return sum / txRSSI.size();
+            return sum / rssi.size();
         }
     }
-
-    public int getAvgRxRSSI() {
-        int sum = 0;
-        for (int rssi : rxRSSI) {
-            sum += rssi;
-        }
-        if (rxRSSI.size() == 0) {
-            return 0;
-        }
-        else {
-            return sum / rxRSSI.size();
-        }
-    }
-
-
 
     public JSONObject toJSONObject() {
         JSONObject json = new JSONObject();
 
         try {
             json.put("channel", channel);
-            json.put("from", from);
-            json.put("to", to);
-            json.put("txBytes", txBytes);
-            json.put("rxBytes", rxBytes);
+            json.put("src", src);
+            json.put("packets", packets);
+            json.put("retryPackets", retryPackets);
             json.put("begin", begin);
             json.put("end", end);
-            json.put("avgTxRSSI", getAvgTxRSSI());
-            json.put("avgRxRSSI", getAvgRxRSSI());
+            json.put("avgRSSI", getAvgRSSI());
         }
         catch (Exception e) {
             // ignore
