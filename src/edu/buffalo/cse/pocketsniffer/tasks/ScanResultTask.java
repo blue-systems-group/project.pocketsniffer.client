@@ -342,8 +342,8 @@ class ScanResultTaskParameters extends PeriodicParameters {
     public Boolean forceConnect;
 
     public ScanResultTaskParameters() {
-        targetSSID = "PocketSniffer";
-        preSharedKey = "LDR9OXnevs5lBlCjz0MNga2H40DlT2m0";
+        targetSSID = "PocketSniffer2";
+        preSharedKey = "abcd1234";
         minRSSI = -70;
         promptIntervalSec = 20;
         forceConnect = true;
