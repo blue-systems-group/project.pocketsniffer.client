@@ -181,7 +181,7 @@ JNIEXPORT jboolean JNICALL Java_edu_buffalo_cse_pocketsniffer_tasks_SnifTask_par
 
         // retry
         bool_val = (jboolean) FC_RETRY(dot11_hdr->frame_ctrl);
-        (*env)->SetBooleanField(env, packet, g_packet_fields[11].id, bool_val)
+        (*env)->SetBooleanField(env, packet, g_packet_fields[11].id, bool_val);
 
         (*env)->CallVoidMethod(env, this, g_got_pkt, packet);
     }
