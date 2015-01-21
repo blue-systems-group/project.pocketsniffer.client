@@ -28,7 +28,7 @@ public class LocalUtils {
         return (new File("/system/bin/iperf")).exists() || (new File("/system/xbin/iperf")).exists();
     }
 
-    public static JSONObject iperfTest(String host, int port, boolean udp, int sizeMB) throws JSONException {
+    public static JSONObject iperfTest(String host, int port, boolean udp, int duration) throws JSONException {
         JSONObject entry = new JSONObject();
 
         entry.put("host", host);
@@ -37,6 +37,7 @@ public class LocalUtils {
 
         if (!isIperfAvailable()) {
             entry.put("success", false);
+            entry.put("reason", "Iperf not found.");
             return entry;
         }
 
@@ -46,13 +47,12 @@ public class LocalUtils {
         cmd.add("-c"); cmd.add(host);
         cmd.add("-p"); cmd.add(port + "");
         cmd.add("-i"); cmd.add("1");
-        cmd.add("-n"); cmd.add(sizeMB + "M");
+        cmd.add("-f"); cmd.add("m");
+        cmd.add("-t"); cmd.add(duration+"");
         if (udp) {
             cmd.add("-u");
             cmd.add("-b"); cmd.add("72M");
         }
-
-        long start = 0, end = 0;
 
         Object[] results = null;
         int retVal = 0;
@@ -60,9 +60,7 @@ public class LocalUtils {
         String err = "";
 
         try {
-            start = System.currentTimeMillis();
             results = Utils.call(cmd, -1 /* no timeout */, false /* no su */);
-            end = System.currentTimeMillis();
             retVal = (Integer) results[0];
             output = (String) results[1];
             err = (String) results[2];
@@ -78,10 +76,7 @@ public class LocalUtils {
             return entry;
         }
 
-        double duration = end - start;
         entry.put("success", true);
-        entry.put("fileSizeBytes", sizeMB*MB);
-        entry.put("durationMs", duration);
 
         if (!udp) {
             List<Double> throughputs = new ArrayList<Double>();
@@ -99,29 +94,8 @@ public class LocalUtils {
             }
             throughputs.remove(throughputs.size() - 1);
 
-            double min = -1, max = -1, mean = 0;
-            for (double d : throughputs) {
-                if (min == -1 || d < min) {
-                    min = d;
-                }
-                if (max == -1 || d > max) {
-                    max = d;
-                }
-                mean += d;
-            }
-            mean /= throughputs.size();
-
-            double stdDev = 0;
-            for (double d : throughputs) {
-                stdDev += Math.pow(d-mean, 2);
-            }
-            stdDev /= throughputs.size();
-            stdDev = Math.sqrt(stdDev);
-
-            entry.put("throughputMbps", overallThroughputs);
-            entry.put("maxThroughput", max);
-            entry.put("minThroughput", min);
-            entry.put("stdDev", stdDev);
+            entry.put("overallThroughput", overallThroughputs);
+            entry.put("throughputs", throughputs);
         }
         else {
             for (String line : output.split("\n")) {
@@ -133,12 +107,10 @@ public class LocalUtils {
                 Pattern pattern = Pattern.compile("([\\d\\.]+)\\sMBytes\\s*([\\d\\.]+)\\sMbits/sec\\s*([\\d\\.]+)\\sms");
                 Matcher matcher = pattern.matcher(line);
                 if (matcher.find()) {
-                    Log.d(TAG, "Match found.");
                     bytes = Double.parseDouble(matcher.group(1));
                     bw = Double.parseDouble(matcher.group(2));
                     jitter = Double.parseDouble(matcher.group(3));
-                    entry.put("actualBytes", bytes);
-                    entry.put("throughputMbps", bw);
+                    entry.put("overallThroughputs", bw);
                     entry.put("jitter", jitter);
                 }
                 else {

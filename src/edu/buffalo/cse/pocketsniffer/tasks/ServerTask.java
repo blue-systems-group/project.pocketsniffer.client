@@ -362,6 +362,9 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
         }
 
         private void collectTraffic(JSONObject request, JSONObject reply) throws JSONException, Exception {
+            JSONArray array = new JSONArray();
+            reply.put("clientTraffic", array);
+ 
             if (!Utils.isPhoneLabDevice(mContext)) {
                 Log.w(TAG, "Not PhoneLab devices, ignoring traffic request.");
                 return;
@@ -374,6 +377,7 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
             }
 
             JSONArray forDevices = new JSONArray();
+            String myMac = Utils.getMacAddress("wlan0");
             for (int i = 0; i < targetDevices.length(); i++) {
                 String mac = targetDevices.getString(i);
                 if (!mInterestedDevices.containsKey(mac)) {
@@ -384,6 +388,11 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
                 if (!info.interested) {
                     Log.d(TAG, "Device " + mac + " is not interested.");
                     continue;
+                }
+                if (myMac.equals(mac)) {
+                    Log.d(TAG, "Do not proivide traffic for me.");
+                    forDevices = new JSONArray();
+                    break;
                 }
                 forDevices.put(mac);
             }
@@ -416,14 +425,18 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
             JSONObject result = mSnifTask.get().toJSONObject();
             result.put("forDevices", forDevices);
 
-            JSONArray array = new JSONArray();
             array.put(result);
             reply.put("clientTraffic", array);
             mSnifTask = null;
 
             Log.d(TAG, "Waiting for Wifi connection.");
             while (!Utils.hasNetworkConnection(mContext, ConnectivityManager.TYPE_WIFI)) {
-                Thread.sleep(5);
+                try {
+                    Thread.sleep(5);
+                }
+                catch (Exception e) {
+                    // pass
+                }
             }
         }
 

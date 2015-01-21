@@ -43,16 +43,16 @@ public class ThroughputTask extends PeriodicTask<ThroughputTaskParameters, Throu
             return;
         }
 
-        int fileSizeMB = (int) (mParameters.minFileSizeMB + Math.random() * (mParameters.maxFileSizeMB - mParameters.minFileSizeMB));
+        int duration = (int) (mParameters.minDurationSec + Math.random() * (mParameters.maxDurationSec - mParameters.minDurationSec));
 
         JSONObject json;
         if (Math.random() < mParameters.udpProbability) {
             Log.d(TAG, "Try iperf with " + mParameters.iperfHost + ":" + mParameters.iperfUDPPort);
-            json = LocalUtils.iperfTest(mParameters.iperfHost, mParameters.iperfUDPPort, true /* udp */, fileSizeMB);
+            json = LocalUtils.iperfTest(mParameters.iperfHost, mParameters.iperfUDPPort, true /* udp */, duration);
         }
         else {
             Log.d(TAG, "Try iperf with " + mParameters.iperfHost + ":" + mParameters.iperfTCPPort);
-            json = LocalUtils.iperfTest(mParameters.iperfHost, mParameters.iperfTCPPort, false /* not udp */, fileSizeMB);
+            json = LocalUtils.iperfTest(mParameters.iperfHost, mParameters.iperfTCPPort, false /* not udp */, duration);
         }
 
         json.put(Logger.KEY_ACTION, ACTION);
@@ -117,21 +117,21 @@ class ThroughputTaskParameters extends PeriodicParameters {
     Long minIntervalSec;
 
     @Element
-    Integer maxFileSizeMB;
+    Integer maxDurationSec;
 
     @Element
-    Integer minFileSizeMB;
+    Integer minDurationSec;
 
     public ThroughputTaskParameters() {
         checkIntervalSec = 300L;
         targetSSID = "PocketSniffer";
         maxIntervalSec = 900L;
         minIntervalSec = 300L;
-        minFileSizeMB = 50;
-        maxFileSizeMB = 100;
+        minDurationSec = 60;
+        maxDurationSec = 120;
         iperfHost = "192.168.1.1";
-        iperfTCPPort = 5001;
-        iperfUDPPort = 5002;
+        iperfTCPPort = 5555;
+        iperfUDPPort = 6666;
         udpProbability = 0.5;
     }
 
@@ -140,8 +140,8 @@ class ThroughputTaskParameters extends PeriodicParameters {
         this.targetSSID = params.targetSSID;
         this.maxIntervalSec = params.maxIntervalSec;
         this.minIntervalSec = params.minIntervalSec;
-        this.maxFileSizeMB = params.maxFileSizeMB;
-        this.minFileSizeMB = params.minFileSizeMB;
+        this.maxDurationSec = params.maxDurationSec;
+        this.minDurationSec = params.minDurationSec;
         this.iperfHost = params.iperfHost;
         this.iperfTCPPort = params.iperfTCPPort;
         this.iperfUDPPort = params.iperfUDPPort;

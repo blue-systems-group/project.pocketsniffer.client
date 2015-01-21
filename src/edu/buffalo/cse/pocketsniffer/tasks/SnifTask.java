@@ -115,9 +115,7 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
 
         mWifiManager.disconnect();
 
-        if (param.forever) {
-            mWakeLock.acquire();
-        }
+        mWakeLock.acquire();
         mWifiLock.acquire();
 
         do {
@@ -214,9 +212,7 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
             }
         } while (param.forever);
 
-        if (param.forever) {
-            mWakeLock.release();
-        }
+        mWakeLock.release();
         mWifiLock.release();
 
         try {
