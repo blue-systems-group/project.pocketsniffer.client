@@ -10,6 +10,7 @@ import org.simpleframework.xml.ElementList;
 import org.simpleframework.xml.Root;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.net.ConnectivityManager;
 import android.net.wifi.WifiInfo;
 import android.util.Log;
@@ -18,6 +19,7 @@ import edu.buffalo.cse.phonelab.toolkit.android.periodictask.PeriodicParameters;
 import edu.buffalo.cse.phonelab.toolkit.android.periodictask.PeriodicState;
 import edu.buffalo.cse.phonelab.toolkit.android.periodictask.PeriodicTask;
 import edu.buffalo.cse.phonelab.toolkit.android.utils.Utils;
+import edu.buffalo.cse.pocketsniffer.ui.DeviceFragment;
 import edu.buffalo.cse.pocketsniffer.utils.LocalUtils;
 import edu.buffalo.cse.pocketsniffer.utils.Logger;
 
@@ -66,8 +68,29 @@ public class PingTask extends PeriodicTask<PingTaskParameters, PingTaskState> {
         return json;
     }
 
+    private int getInterestedDeviceNumber() {
+        SharedPreferences sharedPreferences = mContext.getSharedPreferences(DeviceFragment.PREFERENCES_NAME, Context.MODE_PRIVATE);
+        String str = sharedPreferences.getString(DeviceFragment.KEY_INTERESTED_DEVICES, null);
+        if (str == null) {
+            return 0;
+        }
+        try {
+            JSONArray array = new JSONArray(str);
+            return array.length();
+        }
+        catch (Exception e) {
+            return 0;
+        }
+        
+    }
+
     @Override
     protected void check(PingTaskParameters parameters) throws Exception {
+
+        if (getInterestedDeviceNumber() > 0) {
+            Log.d(TAG, "Have interested device. Do not test RTT.");
+            return;
+        }
 
         if (!Utils.hasNetworkConnection(mContext, ConnectivityManager.TYPE_WIFI)) {
             Log.w(TAG, "No Wifi connection. Do not download.");
@@ -100,7 +123,7 @@ public class PingTask extends PeriodicTask<PingTaskParameters, PingTaskState> {
             cmd.add(Integer.toString(parameters.packetNum));
             cmd.add(host);
             Log.d(TAG, "Ping " + host + " ...");
-            String output = (String) Utils.call(cmd, -1 /* no timeout*/, false /* do not require su */)[1];
+            String output = (String) Utils.call(cmd, -1 /* no timeout*/, true /* require su */)[1];
             results.put(parstPingOutput(output));
         }
         json.put("results", results);

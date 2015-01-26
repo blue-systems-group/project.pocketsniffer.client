@@ -1,10 +1,18 @@
 package edu.buffalo.cse.pocketsniffer.tasks;
 
+import java.util.HashMap;
+import java.util.Map;
+
+import org.json.JSONArray;
 import org.json.JSONObject;
 import org.simpleframework.xml.Element;
 import org.simpleframework.xml.Root;
 
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.net.ConnectivityManager;
 import android.net.wifi.WifiInfo;
 import android.util.Log;
@@ -13,6 +21,8 @@ import edu.buffalo.cse.phonelab.toolkit.android.periodictask.PeriodicParameters;
 import edu.buffalo.cse.phonelab.toolkit.android.periodictask.PeriodicState;
 import edu.buffalo.cse.phonelab.toolkit.android.periodictask.PeriodicTask;
 import edu.buffalo.cse.phonelab.toolkit.android.utils.Utils;
+import edu.buffalo.cse.pocketsniffer.interfaces.DeviceInfo;
+import edu.buffalo.cse.pocketsniffer.ui.DeviceFragment;
 import edu.buffalo.cse.pocketsniffer.utils.LocalUtils;
 import edu.buffalo.cse.pocketsniffer.utils.Logger;
 
@@ -29,8 +39,29 @@ public class ThroughputTask extends PeriodicTask<ThroughputTaskParameters, Throu
         mLogger = Logger.getInstance(mContext);
     }
 
+    private int getInterestedDeviceNumber() {
+        SharedPreferences sharedPreferences = mContext.getSharedPreferences(DeviceFragment.PREFERENCES_NAME, Context.MODE_PRIVATE);
+        String str = sharedPreferences.getString(DeviceFragment.KEY_INTERESTED_DEVICES, null);
+        if (str == null) {
+            return 0;
+        }
+        try {
+            JSONArray array = new JSONArray(str);
+            return array.length();
+        }
+        catch (Exception e) {
+            return 0;
+        }
+        
+    }
+
     @Override
     protected void check(ThroughputTaskParameters parameters) throws Exception {
+
+        if (getInterestedDeviceNumber() > 0) {
+            Log.d(TAG, "Have interested device. Do not test throughput.");
+            return;
+        }
 
         if (!Utils.hasNetworkConnection(mContext, ConnectivityManager.TYPE_WIFI)) {
             Log.w(TAG, "No Wifi connection. Do not download.");

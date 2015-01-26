@@ -31,6 +31,7 @@ public class InfoFragment extends Fragment {
     private static final String PLATFORM_VERISON = "Platform Version";
     private static final String KERNEL_VERSION = "Kernel Version";
     private static final String MONITOR_MODE_SUPPORT = "Monitor Mode Support";
+    private static final String MAC_ADDRESS = "Wifi MAC Address";
     private static final String APP_VERSION = "Application Version";
 
     private List<String> mListTitle;
@@ -69,6 +70,11 @@ public class InfoFragment extends Fragment {
         entries.add(new SimpleEntry<String, String>(MONITOR_MODE_SUPPORT, Utils.isPhoneLabDevice(mContext)? "Yes": "No"));
         entries.add(new SimpleEntry<String, String>(PLATFORM_VERISON, Build.DISPLAY));
         entries.add(new SimpleEntry<String, String>(KERNEL_VERSION, System.getProperty("os.version")));
+        try {
+            entries.add(new SimpleEntry<String, String>(MAC_ADDRESS, Utils.getMacAddress("wlan0")));
+        }
+        catch (Exception e) {
+        }
 
         mListTitle.clear();
         mListData.clear();

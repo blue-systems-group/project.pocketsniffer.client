@@ -136,16 +136,17 @@ public class DeviceFragment extends Fragment {
 
                     @Override
                     public void onClick(View view) {
-                        if (mDeviceNameEditText.getText().length() == 0) {
-                            Toast.makeText(mContext, "Device name can not be empty.", Toast.LENGTH_SHORT).show();
-                            return;
-                        }
                         if (mMacAddressEditText.getText().length() == 0) {
                             Toast.makeText(mContext, "Mac address can not be empty.", Toast.LENGTH_SHORT).show();
                             return;
                         }
+
                         String deviceName = mDeviceNameEditText.getText().toString().trim();
                         String mac = mMacAddressEditText.getText().toString().trim();
+
+                        if (deviceName.length() == 0) {
+                            deviceName = mac;
+                        }
 
                         Pattern pattern = Pattern.compile("([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}");
                         Matcher matcher = pattern.matcher(mac);

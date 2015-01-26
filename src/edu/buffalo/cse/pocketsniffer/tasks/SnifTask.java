@@ -11,6 +11,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import android.content.Context;
+import android.net.ConnectivityManager;
 import android.net.wifi.WifiManager;
 import android.os.PowerManager;
 import android.os.PowerManager.WakeLock;
@@ -76,7 +77,7 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
     private void gotPacket(Packet pkt) {
         String src = pkt.addr2;
 
-        if (src == null) {
+        if (src == null || pkt.type != 2) {
             return;
         }
 
@@ -103,13 +104,23 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
         entry.end = Utils.getDateTimeString(pkt.tv_sec, pkt.tv_usec);
     }
 
+    private void setPcapBuffer(int size) {
+        try {
+            Utils.call("echo " + size + " > /proc/sys/net/core/rmem_max", -1, true);
+            Utils.call("echo " + size + " > /proc/sys/net/core/rmem_default", -1, true);
+        }
+        catch (Exception e) {
+            // ignore
+        }
+    }
+
     @Override
     protected SnifTask.Result doInBackground(SnifTask.Params... params) {
         SnifTask.Result result = new SnifTask.Result();
         SnifTask.Progress progress = new SnifTask.Progress();
 
         List<String> cmdBase = new ArrayList<String>();
-        cmdBase.addAll(Arrays.asList(new String[]{"tcpdump", "-i", MONITOR_IFACE, "-n", "-s", "0"}));
+        cmdBase.addAll(Arrays.asList(new String[]{"tcpdump", "-i", MONITOR_IFACE, "-n", "-s", "3000"}));
 
         SnifTask.Params param = params[0];
 
@@ -117,6 +128,7 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
 
         mWakeLock.acquire();
         mWifiLock.acquire();
+
 
         do {
             for (int chan : param.channels) {
@@ -126,22 +138,13 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
                 }
 
                 try {
-                    if (!Utils.ifaceUp(MONITOR_IFACE, true)) {
-                        continue;
-                    }
+                    Utils.ifaceUp(WLAN_IFACE, true);
+                    Utils.setChannel(WL_DEV_NAME, chan);
+                    setPcapBuffer(4*1024*1024);
+                    Utils.ifaceUp(MONITOR_IFACE, true);
                 }
                 catch (Exception e) {
                     Log.e(TAG, "Failed to bring up iface " + MONITOR_IFACE + ".", e);
-                    continue;
-                }
-
-                try {
-                    if (!Utils.setChannel(WL_DEV_NAME, chan)) {
-                        continue;
-                    }
-                }
-                catch (Exception e) {
-                    Log.e(TAG, "Failed to set channel", e);
                     continue;
                 }
 
@@ -173,6 +176,7 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
                     Log.e(TAG, "Failed to call tcpdump (" + exitValue + "): " + err);
                     continue;
                 }
+                Log.d(TAG, "Tcpdump done.");
 
                 cmd.clear();
                 cmd.add("chown");
@@ -191,12 +195,14 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
                     Log.e(TAG, "Failed to change file ownership.", e);
                     continue;
                 }
+                Log.d(TAG, "Chown done.");
 
                 startParsing();
                 if (!parsePcap(capFile.getAbsolutePath())) {
                     Log.e(TAG, "Failed to parse cap file.");
                     continue;
                 }
+                Log.d(TAG, "Parse Done.");
 
                 // delete cap file if we're running forever
                 if (param.forever) {
@@ -212,19 +218,32 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
             }
         } while (param.forever);
 
-        mWakeLock.release();
-        mWifiLock.release();
 
         try {
             Utils.ifaceUp(MONITOR_IFACE, false);
             // bring down wlan0, wpa_supplicant will bring it up, and set it up
             // properly.
             Utils.ifaceUp(WLAN_IFACE, false);
+            Utils.ifaceUp(WLAN_IFACE, true);
         }
         catch (Exception e) {
             // ignore
         }
-        mWifiManager.reconnect();
+
+        Log.d(TAG, "Waiting for Wifi connection.");
+        while (!Utils.hasNetworkConnection(mContext, ConnectivityManager.TYPE_WIFI)) {
+            try {
+                mWifiManager.startScan();
+                Thread.sleep(1);
+                mWifiManager.reconnect();
+            }
+            catch (Exception e) {
+                // pass
+            }
+        }
+
+        mWifiLock.release();
+        mWakeLock.release();
         return result;
     }
 

@@ -115,11 +115,6 @@ JNIEXPORT jboolean JNICALL Java_edu_buffalo_cse_pocketsniffer_tasks_SnifTask_par
     struct pcap_pkthdr header;
 
     while ((pkt = pcap_next(handle, &header)) != NULL) {
-        if (header.len != header.caplen) {
-            LOGE(TAG, "Ignoring truncated packet.");
-            continue;
-        }
-
         custom_radiotap_header_t* radiotap_hdr = parse_radiotap_header(pkt);
         pkt += sizeof(custom_radiotap_header_t);
         dot11_header_t* dot11_hdr = parse_dot11_header(pkt);
@@ -128,6 +123,9 @@ JNIEXPORT jboolean JNICALL Java_edu_buffalo_cse_pocketsniffer_tasks_SnifTask_par
 
         // type
         int_val = (jint) FC_TYPE(dot11_hdr->frame_ctrl);
+        if (int_val != DOT11_TYPE_DATA) {
+            continue;
+        }
         (*env)->SetIntField(env, packet, g_packet_fields[0].id, int_val);
 
         // subtype
@@ -168,7 +166,7 @@ JNIEXPORT jboolean JNICALL Java_edu_buffalo_cse_pocketsniffer_tasks_SnifTask_par
             (*env)->DeleteLocalRef(env, str_val);
         }
         else {
-            (*env)->SetObjectField(env, packet, g_packet_fields[8].id, NULL);
+            continue;
         }
 
         // rssi
