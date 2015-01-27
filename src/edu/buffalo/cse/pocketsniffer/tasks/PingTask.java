@@ -182,6 +182,7 @@ class PingTaskParameters extends PeriodicParameters {
 
 
     public PingTaskParameters() {
+        disabled = true;
         checkIntervalSec = 300L;
         targetSSID = "PocketSniffer";
         minIntervalSec = 300;

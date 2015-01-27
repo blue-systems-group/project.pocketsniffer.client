@@ -154,6 +154,7 @@ class ThroughputTaskParameters extends PeriodicParameters {
     Integer minDurationSec;
 
     public ThroughputTaskParameters() {
+        disabled = true;
         checkIntervalSec = 300L;
         targetSSID = "PocketSniffer";
         maxIntervalSec = 900L;
