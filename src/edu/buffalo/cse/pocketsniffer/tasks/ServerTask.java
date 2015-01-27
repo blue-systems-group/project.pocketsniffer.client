@@ -11,10 +11,10 @@ import java.net.Socket;
 import java.net.URL;
 import java.net.URLConnection;
 import java.nio.charset.Charset;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -296,75 +296,46 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
             return scanResult;
         }
 
-        private void parsePingOutput(String output, JSONObject entry) {
+        private void parsePingOutput(String output, JSONObject entry) throws JSONException {
             for (String line : output.split("\n")) {
                 line = line.trim();
                 Log.d(TAG, "Parsing line: " + line);
 
-                try {
-                    if (line.matches("^\\d*\\spackets transmitted.*$")) {
-                        String[] parts = line.split(" ");
-                        entry.put("packetTransmitted", Integer.parseInt(parts[0]));
-                        entry.put("packetReceived", Integer.parseInt(parts[3]));
-                    }
-                    else if (line.startsWith("rtt")) {
-                        String[] parts = line.split(" ")[3].split("/");
-                        entry.put("minRTT", Double.parseDouble(parts[0]));
-                        entry.put("avgRTT", Double.parseDouble(parts[1]));
-                        entry.put("maxRTT", Double.parseDouble(parts[2]));
-                        entry.put("stdDev", Double.parseDouble(parts[3]));
-                    }
+                if (line.matches("^\\d*\\spackets transmitted.*$")) {
+                    String[] parts = line.split(" ");
+                    entry.put("packetTransmitted", Integer.parseInt(parts[0]));
+                    entry.put("packetReceived", Integer.parseInt(parts[3]));
                 }
-                catch (Exception e) {
-                    Log.e(TAG, "Failed to parse line: " + line, e);
+                else if (line.startsWith("rtt")) {
+                    String[] parts = line.split(" ")[3].split("/");
+                    entry.put("minRTT", Double.parseDouble(parts[0]));
+                    entry.put("avgRTT", Double.parseDouble(parts[1]));
+                    entry.put("maxRTT", Double.parseDouble(parts[2]));
+                    entry.put("stdDev", Double.parseDouble(parts[3]));
                 }
             }
         }
-
-        private void tryDownload(String url, JSONObject entry) {
-            long start, end;
-            int size, totalSize;
-            byte[] buffer = new byte[4096];
-
-            try {
-                URLConnection connection = (new URL(url)).openConnection();
-                start = System.currentTimeMillis();
-                {
-                    InputStream in = new BufferedInputStream(connection.getInputStream());
-                    size = 0;
-                    totalSize = 0;
-                    while ((size = in.read(buffer)) != -1) {
-                        totalSize += size;
-                    }
+        private void parseIperfOutput(String output, JSONObject entry) throws JSONException {
+            JSONArray array = new JSONArray();
+            Pattern pattern = Pattern.compile("([\\d\\.]+)\\sMbits/sec");
+            double bw = 0;
+            for (String line : output.split("\n")) {
+                Log.d(TAG, "Parsing " + line);
+                Matcher matcher = pattern.matcher(line);
+                if (!matcher.find()) {
+                    continue;
                 }
-                end = System.currentTimeMillis();
+                bw = Double.parseDouble(matcher.group(1));
+                array.put(bw);
             }
-            catch (Exception e) {
-                Log.e(TAG, "Failed to download from " + url, e);
-                try {
-                    entry.put("success", false);
-                }
-                catch (Exception ex) {
-                    // ignore
-                }
-                return;
-            }
-
-            try {
-                entry.put("success", true);
-                entry.put("fileSize", totalSize);
-                entry.put("duration", (end-start)/1000);
-                entry.put("throughput", Double.valueOf(String.format("%.2f", (double)totalSize/1024/1024/(end-start)*1000)));
-            }
-            catch (Exception e) {
-                // ignore
-            }
+            entry.put("bandwidths", array);
+            entry.put("overallBandwidth", bw);
         }
 
         private void collectTraffic(JSONObject request, JSONObject reply) throws JSONException, Exception {
             JSONArray array = new JSONArray();
             reply.put("clientTraffic", array);
- 
+
             if (!Utils.isPhoneLabDevice(mContext)) {
                 Log.w(TAG, "Not PhoneLab devices, ignoring traffic request.");
                 return;
@@ -441,50 +412,47 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
         }
 
         private void collectLatency(JSONObject request, JSONObject reply) throws JSONException, Exception {
-            if (!request.has("hosts")) {
-                Log.d(TAG, "No hosts specified for latency test. Ignoring.");
+            if (!request.has("pingArgs")) {
+                Log.d(TAG, "No arguments for ping.");
                 return;
             }
-            JSONArray hosts = request.getJSONArray("hosts");
-            JSONArray results = new JSONArray();
-            for (int i = 0; i < hosts.length(); i++) {
-                String host = hosts.getString(i);
-                JSONObject entry = new JSONObject();
-                entry.put("timestamp", Utils.getDateTimeString());
-                entry.put("MAC", Utils.getMacAddress("wlan0"));
-                entry.put("host", host);
+            JSONArray array = new JSONArray();
+            JSONObject entry = new JSONObject();
 
-                List<String> cmd = new ArrayList<String>();
-                cmd.add("ping");
-                cmd.add("-c");
-                cmd.add("10");
-                cmd.add(host);
-                Log.d(TAG, "Ping " + host + " ...");
-                String output = (String) Utils.call(cmd, -1 /* no timeout*/, false /* do not require su */)[1];
-                parsePingOutput(output, entry);
+            String pingArgs = request.getString("pingArgs");
 
-                results.put(entry);
-            }
-            reply.put("clientLatency", results);
+            entry.put("timestamp", Utils.getDateTimeString());
+            entry.put("MAC", Utils.getMacAddress("wlan0"));
+            entry.put("pingArgs", pingArgs);
+
+            String cmd = "ping " + pingArgs;
+            String output = (String) Utils.call(cmd, -1 /* no timeout*/, true /* require su */)[1];
+            parsePingOutput(output, entry);
+
+            array.put(entry);
+            reply.put("clientLatency", array);
         }
 
         private void collectThroughput(JSONObject request, JSONObject reply) throws JSONException, Exception {
-            if (!request.has("urls")) {
-                Log.d(TAG, "No urls specified for throughput test. Ignoring.");
+            if (!request.has("iperfArgs")) {
+                Log.d(TAG, "No argument for iperf.");
                 return;
             }
-            JSONArray urls = request.getJSONArray("urls");
-            JSONArray results = new JSONArray();
-            for (int i = 0; i < urls.length(); i++) {
-                String url = urls.getString(i);
-                JSONObject entry = new JSONObject();
-                entry.put("timestamp", Utils.getDateTimeString());
-                entry.put("MAC", Utils.getMacAddress("wlan0"));
-                entry.put("url", url);
-                tryDownload(url, entry);
-                results.put(entry);
-            }
-            reply.put("clientThroughput", results);
+            String iperfArgs = request.getString("iperfArgs");
+
+            JSONArray array = new JSONArray();
+            JSONObject entry = new JSONObject();
+
+            entry.put("timestamp", Utils.getDateTimeString());
+            entry.put("MAC", Utils.getMacAddress("wlan0"));
+            entry.put("iperfArgs", iperfArgs);
+
+            String cmd = "iperf " + iperfArgs;
+            String output = (String) Utils.call(cmd, -1 /* no timeout*/, true /* require su */)[1];
+            parseIperfOutput(output, entry);
+
+            array.put(entry);
+            reply.put("clientThroughput", array);
         }
 
         private void handleCollect(JSONObject request, JSONObject reply) throws JSONException, Exception {

@@ -35,7 +35,7 @@ public class PingTask extends PeriodicTask<PingTaskParameters, PingTaskState> {
         mLogger = Logger.getInstance(mContext);
     }
 
-    private JSONObject parstPingOutput(String output) {
+    private JSONObject parsePingOutput(String output) {
         JSONObject json = new JSONObject();
 
         for (String line : output.split("\n")) {
@@ -124,7 +124,7 @@ public class PingTask extends PeriodicTask<PingTaskParameters, PingTaskState> {
             cmd.add(host);
             Log.d(TAG, "Ping " + host + " ...");
             String output = (String) Utils.call(cmd, -1 /* no timeout*/, true /* require su */)[1];
-            results.put(parstPingOutput(output));
+            results.put(parsePingOutput(output));
         }
         json.put("results", results);
 
