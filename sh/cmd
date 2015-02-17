@@ -25,4 +25,5 @@ case $COMMAND in
     proximity)  adb $DEVICE shell am broadcast -a edu.buffalo.cse.pocketsniffer.tasks.ProximityTask.Check ;;
     snif)       adb $DEVICE shell am broadcast -a edu.buffalo.cse.pocketsniffer.SnifferService.Snif ;;
     upload)     adb $DEVICE shell am broadcast -a edu.buffalo.cse.pocketsniffer.UploaderTask.Check ;;
+    server)     adb $DEVICE shell am broadcast -a edu.buffalo.cse.pocketsniffer.tasks.ServerTask.Check ;;
 esac
