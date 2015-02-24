@@ -1,18 +1,16 @@
 package edu.buffalo.cse.pocketsniffer.tasks;
 
-import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.File;
-import java.io.InputStream;
+import java.io.InterruptedIOException;
 import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.net.URL;
-import java.net.URLConnection;
 import java.nio.charset.Charset;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -31,7 +29,10 @@ import android.net.ConnectivityManager;
 import android.net.wifi.ScanResult;
 import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiInfo;
+import android.net.wifi.WifiManager;
 import android.os.AsyncTask;
+import android.os.PowerManager;
+import android.os.PowerManager.WakeLock;
 import android.util.Log;
 
 import edu.buffalo.cse.phonelab.toolkit.android.periodictask.PeriodicParameters;
@@ -51,6 +52,9 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
 
     private SnifTask mSnifTask;
 
+    private WakeLock mWakeLock;
+    private WifiManager.WifiLock mWifiLock;
+
     private Map<String, DeviceInfo> mInterestedDevices;
     private BroadcastReceiver mInterestedDeviceReceiver = new BroadcastReceiver() {
 
@@ -69,6 +73,11 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
 
         SharedPreferences sharedPreferences = mContext.getSharedPreferences(DeviceFragment.PREFERENCES_NAME, Context.MODE_PRIVATE);
         parseInterestedDevices(sharedPreferences.getString(DeviceFragment.KEY_INTERESTED_DEVICES, "[]"));
+
+        PowerManager powerManager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
+        mWakeLock = powerManager.newWakeLock(PowerManager.SCREEN_DIM_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP, TAG);
+        mWifiLock = mWifiManager.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, TAG);
+ 
     }
 
     private void parseInterestedDevices(String s) {
@@ -85,6 +94,13 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
     }
 
     public void startServerThread() {
+        if (mServerThread != null && (System.currentTimeMillis() - mServerThread.lastAccept) > (mParameters.acceptTimeoutSec+120)*1000) {
+            Log.d(TAG, "Server thread is dead.");
+            mServerThread.interrupt();
+            closeServerSocket();
+            mServerThread = null;
+        }
+
         if (mServerThread == null || mServerThread.getState() == Thread.State.TERMINATED) {
             Log.d(TAG, "Creating server thread.");
             mServerThread = new ServerThread(mParameters.serverPort);
@@ -122,7 +138,7 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
         }
 
         WifiInfo info = mWifiManager.getConnectionInfo();
-        if (info != null && Utils.stripQuotes(info.getSSID()).equals(mParameters.targetSSID)) {
+        if (info != null && Utils.stripQuotes(info.getSSID()).startsWith(mParameters.targetSSIDPrefix)) {
             return true;
         }
         Log.d(TAG, "Not connected to PocketSniffer wifi, server should not run.");
@@ -193,18 +209,27 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
 
         private int port;
 
+        public long lastAccept;
+
         public ServerThread(int port) {
             this.port = port;
         }
 
         public void run() {
             while (shouldServerRunning()) {
+                if (mWakeLock.isHeld()) {
+                    mWakeLock.release();
+                }
+                if (mWifiLock.isHeld()) {
+                    mWifiLock.release();
+                }
+
                 // open a new server socket each time, since the current one
                 // may be broken when go to monitor mode
                 try {
                     mServerSock = new ServerSocket(port);
                     mServerSock.setReuseAddress(true);
-                    mServerSock.setSoTimeout(0);
+                    mServerSock.setSoTimeout(mParameters.acceptTimeoutSec*1000);
                 }
                 catch (Exception e) {
                     Log.e(TAG, "Failed to create server socket.", e);
@@ -213,14 +238,28 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
                 Log.d(TAG, "Successfully created server socket on port " + port);
 
                 Socket connection = null;
-                try {
-                    connection = mServerSock.accept();
-                }
-                catch (Exception e) {
-                    Log.e(TAG, "Failed to receive receivedPacket.", e);
-                    break;
+                while (true) {
+                    try {
+                        lastAccept = System.currentTimeMillis();
+                        connection = mServerSock.accept();
+                        break;
+                    }
+                    catch (InterruptedIOException e) {
+                        continue;
+                    }
+                    catch (Exception e) {
+                        Log.e(TAG, "Failed to accept.", e);
+                        break;
+                    }
                 }
                 closeServerSocket();
+
+                if (connection == null) {
+                    continue;
+                }
+
+                mWakeLock.acquire();
+                mWifiLock.acquire();
 
                 InetAddress remoteAddr = connection.getInetAddress();
                 Log.d(TAG, "Get connection from " + remoteAddr);
@@ -347,8 +386,7 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
                 return;
             }
 
-            JSONArray forDevices = new JSONArray();
-            String myMac = Utils.getMacAddress("wlan0");
+            String forDevice = null;
             for (int i = 0; i < targetDevices.length(); i++) {
                 String mac = targetDevices.getString(i);
                 if (!mInterestedDevices.containsKey(mac)) {
@@ -360,15 +398,11 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
                     Log.d(TAG, "Device " + mac + " is not interested.");
                     continue;
                 }
-                if (myMac.equals(mac)) {
-                    Log.d(TAG, "Do not proivide traffic for me.");
-                    forDevices = new JSONArray();
-                    break;
-                }
-                forDevices.put(mac);
+                forDevice = mac;
+                break;
             }
 
-            if (forDevices.length() == 0) {
+            if (forDevice == null) {
                 Log.d(TAG, "All target devices are not interested.");
                 return;
             }
@@ -394,7 +428,7 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
             mSnifTask.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, params);
 
             JSONObject result = mSnifTask.get().toJSONObject();
-            result.put("forDevices", forDevices);
+            result.put("forDevice", forDevice);
 
             array.put(result);
             reply.put("clientTraffic", array);
@@ -426,7 +460,7 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
             entry.put("pingArgs", pingArgs);
 
             String cmd = "ping " + pingArgs;
-            String output = (String) Utils.call(cmd, -1 /* no timeout*/, true /* require su */)[1];
+            String output = (String) Utils.call(cmd, -1 /* no timeout*/, false /* require su */)[1];
             parsePingOutput(output, entry);
 
             array.put(entry);
@@ -448,11 +482,34 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
             entry.put("iperfArgs", iperfArgs);
 
             String cmd = "iperf " + iperfArgs;
-            String output = (String) Utils.call(cmd, -1 /* no timeout*/, true /* require su */)[1];
+            String output = (String) Utils.call(cmd, -1 /* no timeout*/, false /* require su */)[1];
             parseIperfOutput(output, entry);
 
             array.put(entry);
             reply.put("clientThroughput", array);
+        }
+
+        private void collectNearbyDevices(JSONObject request, JSONObject reply) throws JSONException, Exception {
+            JSONArray array = new JSONArray();
+            JSONObject entry = new JSONObject();
+
+            entry.put("MAC", Utils.getMacAddress("wlan0"));
+            entry.put("timestamp", Utils.getDateTimeString());
+
+            JSONArray neighbors = new JSONArray();
+
+            for (DeviceInfo info : mInterestedDevices.values()) {
+                JSONObject neighbor = new JSONObject();
+                neighbor.put("MAC", info.mac);
+                neighbor.put("signalStrength", info.rssi);
+                neighbor.put("lastSeen", Utils.getDateTimeString(info.lastSeen));
+                neighbor.put("interested", info.interested);
+                neighbors.put(neighbor);
+            }
+            entry.put("neighbors", neighbors);
+
+            array.put(entry);
+            reply.put("nearbyDevices", array);
         }
 
         private void handleCollect(JSONObject request, JSONObject reply) throws JSONException, Exception {
@@ -483,32 +540,37 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
             if (request.optBoolean("clientThroughput", false)) {
                 collectThroughput(request, reply);
             }
+
+            if (request.optBoolean("nearbyDevices", false)) {
+                collectNearbyDevices(request, reply);
+            }
         }
 
         private void handleReassoc(JSONObject request, JSONObject reply) throws JSONException {
             String bssid = request.getString("newBSSID").toLowerCase();
 
-            boolean found = false;
-            for (ScanResult result: mWifiManager.getScanResults()) {
+            String SSID = null;
+            for (ScanResult result : mWifiManager.getScanResults()) {
                 if (result.BSSID.toLowerCase().equals(bssid)) {
-                    found = true;
+                    SSID = result.SSID;
                     break;
                 }
             }
-            if (!found) {
-                Log.d(TAG, "BSSID " + bssid + " is not visible.");
+
+            if (SSID == null) {
+                Log.w(TAG, "AP " + bssid + " not found.");
                 return;
             }
 
             WifiConfiguration config = null;
             for (WifiConfiguration c : mWifiManager.getConfiguredNetworks()) {
-                if (Utils.stripQuotes(c.SSID).equals(mParameters.targetSSID)) {
+                if (Utils.stripQuotes(c.SSID).equals(SSID)) {
                     config = c;
                     break;
                 }
             }
             if (config == null) {
-                Log.d(TAG, "No PocketSniffer AP config found.");
+                Log.d(TAG, "No AP config for " + bssid + " found.");
             }
             else {
                 Log.d(TAG, "Setting PocketSniffer AP config BSSID to " + bssid);
@@ -517,7 +579,7 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
                 mWifiManager.saveConfiguration();
                 mWifiManager.disconnect();
                 mWifiManager.reconnect();
-            }
+           }
         }
 
         private JSONObject handle(JSONObject request) {
@@ -581,23 +643,28 @@ class ServerTaskParameters extends PeriodicParameters {
     public Integer serverPort;
 
     @Element
-    public String targetSSID;
+    public String targetSSIDPrefix;
 
     @Element
     public Integer connectionTimeoutSec;
 
+    @Element
+    public Integer acceptTimeoutSec;
+
     public ServerTaskParameters() {
         checkIntervalSec = 60L;
         serverPort = 6543;
-        targetSSID = "PocketSniffer";
+        targetSSIDPrefix = "PocketSniffer";
         connectionTimeoutSec = 30;
+        acceptTimeoutSec = 10;
     }
 
     public ServerTaskParameters(ServerTaskParameters params) {
         this.checkIntervalSec = params.checkIntervalSec;
         this.serverPort = params.serverPort;
-        this.targetSSID = params.targetSSID;
+        this.targetSSIDPrefix = params.targetSSIDPrefix;
         this.connectionTimeoutSec = params.connectionTimeoutSec;
+        this.acceptTimeoutSec = params.acceptTimeoutSec;
     }
 
 }

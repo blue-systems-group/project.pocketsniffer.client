@@ -1,5 +1,8 @@
 package edu.buffalo.cse.pocketsniffer.tasks;
 
+import java.util.HashSet;
+import java.util.Set;
+
 import org.json.JSONObject;
 import org.simpleframework.xml.Element;
 import org.simpleframework.xml.Root;
@@ -50,13 +53,10 @@ public class ScanResultTask extends PeriodicTask<ScanResultTaskParameters, ScanR
      *
      * @return networkId of PocketSniffer network.
      */
-    private int getOrCreateNetworkId() {
+    private int getOrCreateNetworkId(String ssid) {
         int networkId = -1;
-        int priority = -1;
         for (WifiConfiguration config : mWifiManager.getConfiguredNetworks()) {
-            priority = Math.max(priority, config.priority);
-
-            if (mParameters.targetSSID.equals(Utils.stripQuotes(config.SSID))) {
+            if (ssid.equals(Utils.stripQuotes(config.SSID))) {
                 if (networkId == -1) {
                     // reuse network id from previous configration.
                     networkId = config.networkId;
@@ -69,11 +69,10 @@ public class ScanResultTask extends PeriodicTask<ScanResultTaskParameters, ScanR
         }
 
         WifiConfiguration target = new WifiConfiguration();
-        target.SSID = Utils.addQuotes(mParameters.targetSSID);
+        target.SSID = Utils.addQuotes(ssid);
         target.preSharedKey = Utils.addQuotes(mParameters.preSharedKey);
         target.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WPA_PSK, true);
         target.allowedAuthAlgorithms.set(WifiConfiguration.AuthAlgorithm.OPEN, true);
-        target.priority = priority+1;
 
         if (networkId == -1) {
             networkId = mWifiManager.addNetwork(target);
@@ -103,72 +102,58 @@ public class ScanResultTask extends PeriodicTask<ScanResultTaskParameters, ScanR
 
         logScanResult();
 
-        int networkId = getOrCreateNetworkId();
-
         if (!mWifiManager.isWifiEnabled()) {
             Log.d(TAG, "Wifi disabled by user.");
             return;
         }
 
-        WifiInfo info = mWifiManager.getConnectionInfo();
-        if (info != null && mParameters.targetSSID.equals(Utils.stripQuotes(info.getSSID()))) {
-            Log.d(TAG, "Already connected to " + info.getSSID());
-            return;
-        }
-
-        boolean found = false;
+        Set<String> ssids = new HashSet<String>();
         for (ScanResult result : mWifiManager.getScanResults()) {
-            if (mParameters.targetSSID.equals(Utils.stripQuotes(result.SSID))) {
+            if (Utils.stripQuotes(result.SSID).startsWith(mParameters.targetSSIDPrefix)) {
                 if (result.level < mParameters.minRSSI) {
-                    Log.d(TAG, "Found " + mParameters.targetSSID + ", yet signal strength is weak (" + result.level + " dBm).");
+                    Log.d(TAG, "Found " + result.SSID + ", yet signal strength is weak (" + result.level + " dBm).");
                 }
                 else {
-                    Log.d(TAG, "Found " + mParameters.targetSSID + " with RSSI = " + result.level + " dBm.");
-                    found = true;
-                    break;
+                    Log.d(TAG, "Found " + result.SSID + " with RSSI = " + result.level + " dBm.");
+                    ssids.add(result.SSID);
                 }
             }
         }
 
-        if (!found) {
+        if (ssids.size() == 0) {
             Log.d(TAG, "No PocketSniffer Wifi found.");
             mNotificationManager.cancel(WIFI_NOTIFICATION_ID);
-
-            for (WifiConfiguration config : mWifiManager.getConfiguredNetworks()) {
-                mWifiManager.enableNetwork(config.networkId, false);
-            }
-            if (!Utils.hasNetworkConnection(mContext, ConnectivityManager.TYPE_WIFI)) {
-                mWifiManager.reconnect();
-            }
-            return;
-        }
-
-        if (mParameters.forceConnect) {
-            Log.d(TAG, "Force connectting to PocketSniffer Wifi.");
-            mWifiManager.disconnect();
-            mWifiManager.enableNetwork(networkId, true /* disable others */);
-            mWifiManager.reconnect();
         }
         else {
-            mWifiManager.enableNetwork(networkId, false /* do not disable others */);
-
-            if (mLastPrompt > 0 && (System.currentTimeMillis() - mLastPrompt) < mParameters.promptIntervalSec * 1000) {
-                Log.d(TAG, "Postpone SSID check.");
+            for (String ssid : ssids) {
+                getOrCreateNetworkId(ssid);
             }
-            else {
-                Notification.Builder builder = new Notification.Builder(mContext);
+        }
 
-                builder.setSmallIcon(R.drawable.ic_launcher);
-                builder.setLargeIcon(((BitmapDrawable) mContext.getResources().getDrawable(R.drawable.wifi)).getBitmap());
-                builder.setContentTitle("PocketSniffer");
-                builder.setTicker("PocketSniffer Wifi available!");
-                builder.setContentText("PocketSniffer Wifi found.");
-                builder.setSubText("Click to connect.");
-                builder.setContentIntent(PendingIntent.getActivity(mContext, 0, new Intent(WifiManager.ACTION_PICK_WIFI_NETWORK), PendingIntent.FLAG_ONE_SHOT));
-                builder.setAutoCancel(true);
-                mNotificationManager.notify(WIFI_NOTIFICATION_ID, builder.build());
-                mLastPrompt = System.currentTimeMillis();
+        for (WifiConfiguration config : mWifiManager.getConfiguredNetworks()) {
+            if (!ssids.contains(Utils.stripQuotes(config.SSID))) {
+                mWifiManager.disableNetwork(config.networkId);
             }
+        }
+
+        WifiInfo info = mWifiManager.getConnectionInfo();
+        if (info != null && Utils.stripQuotes(info.getSSID()).startsWith(mParameters.targetSSIDPrefix)) {
+            Log.d(TAG, "Already connected to " + info.getSSID());
+            mNotificationManager.cancel(WIFI_NOTIFICATION_ID);
+        }
+        else if (System.currentTimeMillis() - mLastPrompt > mParameters.promptIntervalSec*1000) {
+            Notification.Builder builder = new Notification.Builder(mContext);
+
+            builder.setSmallIcon(R.drawable.ic_launcher);
+            builder.setLargeIcon(((BitmapDrawable) mContext.getResources().getDrawable(R.drawable.wifi)).getBitmap());
+            builder.setContentTitle("PocketSniffer");
+            builder.setTicker("PocketSniffer Wifi available!");
+            builder.setContentText("PocketSniffer Wifi found.");
+            builder.setSubText("Click to connect.");
+            builder.setContentIntent(PendingIntent.getActivity(mContext, 0, new Intent(WifiManager.ACTION_PICK_WIFI_NETWORK), PendingIntent.FLAG_ONE_SHOT));
+            builder.setAutoCancel(true);
+            mNotificationManager.notify(WIFI_NOTIFICATION_ID, builder.build());
+            mLastPrompt = System.currentTimeMillis();
         }
     }
 
@@ -210,7 +195,7 @@ public class ScanResultTask extends PeriodicTask<ScanResultTaskParameters, ScanR
         }
 
         WifiInfo info = mWifiManager.getConnectionInfo();
-        if (info != null && mParameters.targetSSID.equals(Utils.stripQuotes(info.getSSID()))) {
+        if (info != null && mParameters.targetSSIDPrefix.equals(Utils.stripQuotes(info.getSSID()))) {
             mNotificationManager.cancel(WIFI_NOTIFICATION_ID);
         }
     }
@@ -312,13 +297,6 @@ public class ScanResultTask extends PeriodicTask<ScanResultTaskParameters, ScanR
     public boolean parametersUpdated(String manifestString) {
         super.parametersUpdated(manifestString);
 
-        if (!mParameters.forceConnect) {
-            for (WifiConfiguration config : mWifiManager.getConfiguredNetworks()) {
-                Log.d(TAG, "Reenabling " + config.SSID);
-                mWifiManager.enableNetwork(config.networkId, false);
-            }
-        }
-
         return true;
     }
 }
@@ -327,7 +305,7 @@ public class ScanResultTask extends PeriodicTask<ScanResultTaskParameters, ScanR
 class ScanResultTaskParameters extends PeriodicParameters {
 
     @Element
-    public String targetSSID;
+    public String targetSSIDPrefix;
 
     @Element
     public String preSharedKey;
@@ -338,25 +316,20 @@ class ScanResultTaskParameters extends PeriodicParameters {
     @Element
     public Integer promptIntervalSec;
 
-    @Element
-    public Boolean forceConnect;
-
     public ScanResultTaskParameters() {
-        targetSSID = "PocketSniffer2";
+        targetSSIDPrefix = "PocketSniffer2";
         preSharedKey = "abcd1234";
         minRSSI = -70;
         promptIntervalSec = 20;
-        forceConnect = true;
     }
 
     public ScanResultTaskParameters(ScanResultTaskParameters params) {
         super(params);
 
-        this.targetSSID = params.targetSSID;
+        this.targetSSIDPrefix = params.targetSSIDPrefix;
         this.preSharedKey = params.preSharedKey;
         this.minRSSI = params.minRSSI;
         this.promptIntervalSec = params.promptIntervalSec;
-        this.forceConnect = params.forceConnect;
     }
 }
 
