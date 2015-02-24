@@ -653,7 +653,7 @@ class ServerTaskParameters extends PeriodicParameters {
 
     public ServerTaskParameters() {
         checkIntervalSec = 60L;
-        serverPort = 6543;
+        serverPort = 7654;
         targetSSIDPrefix = "PocketSniffer";
         connectionTimeoutSec = 30;
         acceptTimeoutSec = 10;

@@ -33,6 +33,7 @@ public class InfoFragment extends Fragment {
     private static final String MONITOR_MODE_SUPPORT = "Monitor Mode Support";
     private static final String MAC_ADDRESS = "Wifi MAC Address";
     private static final String APP_VERSION = "Application Version";
+    private static final String SERIAL = "Serial Number";
 
     private List<String> mListTitle;
     private Map<String, String> mListData;
@@ -66,6 +67,7 @@ public class InfoFragment extends Fragment {
             Log.e(TAG, "Failed to get application version info.", e);
             entries.add(new SimpleEntry<String, String>(APP_VERSION, UNKNOWN));
         }
+        entries.add(new SimpleEntry<String, String>(SERIAL, Build.SERIAL));
 
         entries.add(new SimpleEntry<String, String>(MONITOR_MODE_SUPPORT, Utils.isPhoneLabDevice(mContext)? "Yes": "No"));
         entries.add(new SimpleEntry<String, String>(PLATFORM_VERISON, Build.DISPLAY));
