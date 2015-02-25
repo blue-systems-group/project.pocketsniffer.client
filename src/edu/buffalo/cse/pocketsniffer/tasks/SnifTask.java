@@ -230,6 +230,9 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
             // ignore
         }
 
+        mWifiManager.setWifiEnabled(false);
+        mWifiManager.setWifiEnabled(true);
+
         Log.d(TAG, "Waiting for Wifi connection.");
         while (!Utils.hasNetworkConnection(mContext, ConnectivityManager.TYPE_WIFI)) {
             try {
