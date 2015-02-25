@@ -264,34 +264,45 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
                 InetAddress remoteAddr = connection.getInetAddress();
                 Log.d(TAG, "Get connection from " + remoteAddr);
 
+                JSONObject request = null;
                 JSONObject reply = null;
+                
                 try {
                     String message = Utils.readFull(connection.getInputStream());
                     Log.d(TAG, "Got message: " + message);
-                    reply = handle(new JSONObject(message));
+
+                    request = new JSONObject(message);
+                    reply = handle(request);
                 }
                 catch (Exception e) {
                     Log.e(TAG, "Failed to handle message.", e);
                     continue;
                 }
-                finally {
+
+                if (reply == null) {
                     try {
                         connection.close();
                     }
                     catch (Exception e) {
-                        // ignore
                     }
-                }
-
-                if (reply == null) {
                     continue;
                 }
 
-                Socket sock = null;
+                if (request.optString("action").equals("collect") && request.optBoolean("clientTraffic", false)) {
+                    try {
+                        connection.close();
+                        Log.d(TAG, "Opening new socket.");
+                        connection = new Socket(remoteAddr, mParameters.serverPort);
+                    }
+                    catch (Exception e) {
+                        Log.e(TAG, "Failed to connect to router.");
+                        continue;
+                    }
+                }
+
                 try {
                     Log.d(TAG, "Sending reply: " + reply.toString());
-                    sock = new Socket(remoteAddr, mParameters.serverPort);
-                    OutputStream os = new BufferedOutputStream(sock.getOutputStream());
+                    OutputStream os = new BufferedOutputStream(connection.getOutputStream());
                     os.write(reply.toString().getBytes(Charset.forName("utf-8")));
                     os.flush();
                     os.close();
@@ -301,9 +312,7 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
                 }
                 finally {
                     try {
-                        if (sock != null) {
-                            sock.close();
-                        }
+                        connection.close();
                     }
                     catch (Exception e) {
                         // ignore
