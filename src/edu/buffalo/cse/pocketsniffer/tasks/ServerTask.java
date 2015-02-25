@@ -5,12 +5,12 @@ import java.io.File;
 import java.io.InterruptedIOException;
 import java.io.OutputStream;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.Charset;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -544,10 +544,11 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
                 try {
                     connection.close();
                     Log.d(TAG, "Opening new socket.");
-                    connection = new Socket(remoteAddr, mParameters.serverPort);
+                    connection = new Socket();
+                    connection.connect(new InetSocketAddress(remoteAddr, mParameters.serverPort), 0);
                 }
                 catch (Exception e) {
-                    Log.e(TAG, "Failed to connect to router.");
+                    Log.e(TAG, "Failed to connect to router.", e);
                     return;
                 }
             }
