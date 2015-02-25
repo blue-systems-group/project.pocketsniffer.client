@@ -147,6 +147,12 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
 
     @Override
     protected void check(ServerTaskParameters arg0) throws Exception {
+        if (!mWifiManager.isWifiEnabled()) {
+            Log.d(TAG, "Enabling Wifi.");
+            mWifiManager.setWifiEnabled(true);
+            Utils.safeSleep(1);
+        }
+
         // only run server thread when connected to PocketSniffer wifi
         if (shouldServerRunning()) {
             startServerThread();
@@ -205,123 +211,14 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
         startServerThread();
     }
 
-    private class ServerThread extends Thread {
+    private class HandlerThread extends Thread {
 
-        private int port;
+        private Socket connection;
 
-        public long lastAccept;
-
-        public ServerThread(int port) {
-            this.port = port;
+        public HandlerThread(Socket connection) {
+            this.connection = connection;
         }
 
-        public void run() {
-            while (shouldServerRunning()) {
-                if (mWakeLock.isHeld()) {
-                    mWakeLock.release();
-                }
-                if (mWifiLock.isHeld()) {
-                    mWifiLock.release();
-                }
-
-                // open a new server socket each time, since the current one
-                // may be broken when go to monitor mode
-                try {
-                    mServerSock = new ServerSocket(port);
-                    mServerSock.setReuseAddress(true);
-                    mServerSock.setSoTimeout(mParameters.acceptTimeoutSec*1000);
-                }
-                catch (Exception e) {
-                    Log.e(TAG, "Failed to create server socket.", e);
-                    break;
-                }
-                Log.d(TAG, "Successfully created server socket on port " + port);
-
-                Socket connection = null;
-                while (true) {
-                    try {
-                        lastAccept = System.currentTimeMillis();
-                        connection = mServerSock.accept();
-                        break;
-                    }
-                    catch (InterruptedIOException e) {
-                        continue;
-                    }
-                    catch (Exception e) {
-                        Log.e(TAG, "Failed to accept.", e);
-                        break;
-                    }
-                }
-                closeServerSocket();
-
-                if (connection == null) {
-                    continue;
-                }
-
-                mWakeLock.acquire();
-                mWifiLock.acquire();
-
-                InetAddress remoteAddr = connection.getInetAddress();
-                Log.d(TAG, "Get connection from " + remoteAddr);
-
-                JSONObject request = null;
-                JSONObject reply = null;
-                
-                try {
-                    String message = Utils.readFull(connection.getInputStream());
-                    Log.d(TAG, "Got message: " + message);
-
-                    request = new JSONObject(message);
-                    reply = handle(request);
-                }
-                catch (Exception e) {
-                    Log.e(TAG, "Failed to handle message.", e);
-                    continue;
-                }
-
-                if (reply == null) {
-                    try {
-                        connection.close();
-                    }
-                    catch (Exception e) {
-                    }
-                    continue;
-                }
-
-                if (request.optString("action").equals("collect") && request.optBoolean("clientTraffic", false)) {
-                    try {
-                        connection.close();
-                        Log.d(TAG, "Opening new socket.");
-                        connection = new Socket(remoteAddr, mParameters.serverPort);
-                    }
-                    catch (Exception e) {
-                        Log.e(TAG, "Failed to connect to router.");
-                        continue;
-                    }
-                }
-
-                try {
-                    Log.d(TAG, "Sending reply: " + reply.toString());
-                    OutputStream os = new BufferedOutputStream(connection.getOutputStream());
-                    os.write(reply.toString().getBytes(Charset.forName("utf-8")));
-                    os.flush();
-                    os.close();
-                }
-                catch (Exception e) {
-                    Log.e(TAG, "Failed to send msg.", e);
-                }
-                finally {
-                    try {
-                        connection.close();
-                    }
-                    catch (Exception e) {
-                        // ignore
-                    }
-                }
-            }
-
-            closeServerSocket();
-        }
 
         private JSONObject getScanResult() {
             JSONObject scanResult = new JSONObject();
@@ -442,17 +339,8 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
             array.put(result);
             reply.put("clientTraffic", array);
             mSnifTask = null;
-
-            Log.d(TAG, "Waiting for Wifi connection.");
-            while (!Utils.hasNetworkConnection(mContext, ConnectivityManager.TYPE_WIFI)) {
-                try {
-                    Thread.sleep(5);
-                }
-                catch (Exception e) {
-                    // pass
-                }
-            }
         }
+
 
         private void collectLatency(JSONObject request, JSONObject reply) throws JSONException, Exception {
             if (!request.has("pingArgs")) {
@@ -588,7 +476,7 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
                 mWifiManager.saveConfiguration();
                 mWifiManager.disconnect();
                 mWifiManager.reconnect();
-           }
+            }
         }
 
         private JSONObject handle(JSONObject request) {
@@ -620,6 +508,132 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
             }
             return reply;
         }
+
+        public void run() {
+            mWakeLock.acquire();
+            mWifiLock.acquire();
+
+            InetAddress remoteAddr = connection.getInetAddress();
+            Log.d(TAG, "Get connection from " + remoteAddr);
+
+            JSONObject request = null;
+            JSONObject reply = null;
+
+            try {
+                String message = Utils.readFull(connection.getInputStream());
+                Log.d(TAG, "Got message: " + message);
+
+                request = new JSONObject(message);
+                reply = handle(request);
+            }
+            catch (Exception e) {
+                Log.e(TAG, "Failed to handle message.", e);
+                return;
+            }
+
+            if (reply == null) {
+                try {
+                    connection.close();
+                }
+                catch (Exception e) {
+                }
+                return;
+            }
+
+            if (request.optString("action").equals("collect") && request.optBoolean("clientTraffic", false)) {
+                try {
+                    connection.close();
+                    Log.d(TAG, "Opening new socket.");
+                    connection = new Socket(remoteAddr, mParameters.serverPort);
+                }
+                catch (Exception e) {
+                    Log.e(TAG, "Failed to connect to router.");
+                    return;
+                }
+            }
+
+            try {
+                Log.d(TAG, "Sending reply: " + reply.toString());
+                OutputStream os = new BufferedOutputStream(connection.getOutputStream());
+                os.write(reply.toString().getBytes(Charset.forName("utf-8")));
+                os.flush();
+                os.close();
+            }
+            catch (Exception e) {
+                Log.e(TAG, "Failed to send msg.", e);
+            }
+            finally {
+                try {
+                    connection.close();
+                }
+                catch (Exception e) {
+                    // ignore
+                }
+            }
+
+        }
+
+    }
+
+    private class ServerThread extends Thread {
+
+        private int port;
+
+        public long lastAccept;
+
+        public ServerThread(int port) {
+            this.port = port;
+        }
+
+        public void run() {
+            while (shouldServerRunning()) {
+                if (mWakeLock.isHeld()) {
+                    mWakeLock.release();
+                }
+                if (mWifiLock.isHeld()) {
+                    mWifiLock.release();
+                }
+
+                // open a new server socket each time, since the current one
+                // may be broken when go to monitor mode
+                try {
+                    mServerSock = new ServerSocket(port);
+                    mServerSock.setReuseAddress(true);
+                    mServerSock.setSoTimeout(mParameters.acceptTimeoutSec*1000);
+                }
+                catch (Exception e) {
+                    Log.e(TAG, "Failed to create server socket.", e);
+                    break;
+                }
+                Log.d(TAG, "Successfully created server socket on port " + port);
+
+                Socket connection = null;
+                while (true) {
+                    try {
+                        lastAccept = System.currentTimeMillis();
+                        connection = mServerSock.accept();
+                        break;
+                    }
+                    catch (InterruptedIOException e) {
+                        continue;
+                    }
+                    catch (Exception e) {
+                        Log.e(TAG, "Failed to accept.", e);
+                        break;
+                    }
+                }
+                closeServerSocket();
+
+                if (connection == null) {
+                    continue;
+                }
+
+                (new HandlerThread(connection)).start();
+            }
+
+            closeServerSocket();
+        }
+
     }
 
     private void closeServerSocket() {

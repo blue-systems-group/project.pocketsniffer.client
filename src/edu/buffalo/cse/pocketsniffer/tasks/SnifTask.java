@@ -224,25 +224,23 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
             // bring down wlan0, wpa_supplicant will bring it up, and set it up
             // properly.
             Utils.ifaceUp(WLAN_IFACE, false);
-            Utils.ifaceUp(WLAN_IFACE, true);
         }
         catch (Exception e) {
             // ignore
         }
 
-        mWifiManager.setWifiEnabled(false);
         mWifiManager.setWifiEnabled(true);
 
+
         Log.d(TAG, "Waiting for Wifi connection.");
-        while (!Utils.hasNetworkConnection(mContext, ConnectivityManager.TYPE_WIFI)) {
-            try {
-                mWifiManager.startScan();
-                Thread.sleep(1);
-                mWifiManager.reconnect();
+        while (true) {
+            if (Utils.hasNetworkConnection(mContext, ConnectivityManager.TYPE_WIFI)) {
+                break;
             }
-            catch (Exception e) {
-                // pass
-            }
+            mWifiManager.setWifiEnabled(false);
+            mWifiManager.setWifiEnabled(true);
+            mWifiManager.reassociate();
+            Utils.safeSleep(5);
         }
 
         mWifiLock.release();
