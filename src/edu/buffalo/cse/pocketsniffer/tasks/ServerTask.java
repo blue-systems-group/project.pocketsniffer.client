@@ -55,6 +55,10 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
     private WakeLock mWakeLock;
     private WifiManager.WifiLock mWifiLock;
 
+    private PowerManager mPowerManager;
+
+    private long mLastRequest = System.currentTimeMillis();
+
     private Map<String, DeviceInfo> mInterestedDevices;
     private BroadcastReceiver mInterestedDeviceReceiver = new BroadcastReceiver() {
 
@@ -74,8 +78,8 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
         SharedPreferences sharedPreferences = mContext.getSharedPreferences(DeviceFragment.PREFERENCES_NAME, Context.MODE_PRIVATE);
         parseInterestedDevices(sharedPreferences.getString(DeviceFragment.KEY_INTERESTED_DEVICES, "[]"));
 
-        PowerManager powerManager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
-        mWakeLock = powerManager.newWakeLock(PowerManager.SCREEN_DIM_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP, TAG);
+        mPowerManager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
+        mWakeLock = mPowerManager.newWakeLock(PowerManager.SCREEN_DIM_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP, TAG);
         mWifiLock = mWifiManager.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, TAG);
  
     }
@@ -149,7 +153,9 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
     protected void check(ServerTaskParameters arg0) throws Exception {
         if (!mWifiManager.isWifiEnabled()) {
             Log.d(TAG, "Enabling Wifi.");
+            mWifiManager.setWifiEnabled(false);
             mWifiManager.setWifiEnabled(true);
+            mWifiManager.reassociate();
             Utils.safeSleep(1);
         }
 
@@ -159,6 +165,9 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
         }
         else {
             stopServerThread();
+            if ((System.currentTimeMillis() - mLastRequest) > (120 * 1000)) {
+                mPowerManager.reboot(null);
+            }
         }
     }
 
@@ -479,6 +488,16 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
             }
         }
 
+        private void handleReboot(JSONObject request, JSONObject reply) throws JSONException {
+            Log.d(TAG, "Rebooting!!");
+            try {
+                mPowerManager.reboot(null);
+            }
+            catch (Exception e) {
+                Log.e(TAG, "Failed to reboot.", e);
+            }
+        }
+
         private JSONObject handle(JSONObject request) {
             if (!request.has("action")) {
                 Log.e(TAG, "Request does not have an action.");
@@ -496,6 +515,11 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
                 }
                 else if ("clientReassoc".equals(action)) {
                     handleReassoc(request, reply);
+                    reply = null;
+                }
+                else if ("clientReboot".equals(action)) {
+                    handleReboot(request, reply);
+                    reply = null;
                 }
             }
             catch (Exception e) {
@@ -503,9 +527,6 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
                 reply = null;
             }
 
-            if (reply != null && reply.length() == 0) {
-                reply = null;
-            }
             return reply;
         }
 
@@ -515,6 +536,8 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
 
             InetAddress remoteAddr = connection.getInetAddress();
             Log.d(TAG, "Get connection from " + remoteAddr);
+
+            mLastRequest = System.currentTimeMillis();
 
             JSONObject request = null;
             JSONObject reply = null;
@@ -541,15 +564,20 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
             }
 
             if (request.optString("action").equals("collect") && request.optBoolean("clientTraffic", false)) {
-                try {
-                    connection.close();
-                    Log.d(TAG, "Opening new socket.");
-                    connection = new Socket();
-                    connection.connect(new InetSocketAddress(remoteAddr, mParameters.serverPort), 0);
-                }
-                catch (Exception e) {
-                    Log.e(TAG, "Failed to connect to router.", e);
-                    return;
+                for (int i = 0; i < 10; i++) {
+                    try {
+                        connection.close();
+                        Log.d(TAG, "Opening new socket.");
+                        connection = new Socket();
+                        connection.connect(new InetSocketAddress(remoteAddr, mParameters.serverPort), 0);
+                        break;
+                    }
+                    catch (Exception e) {
+                        Log.e(TAG, "Failed to connect to router. Retrying", e);
+
+                        Utils.safeSleep(3);
+                        continue;
+                    }
                 }
             }
 
@@ -613,6 +641,7 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
                     try {
                         lastAccept = System.currentTimeMillis();
                         connection = mServerSock.accept();
+                        connection.setKeepAlive(true);
                         break;
                     }
                     catch (InterruptedIOException e) {

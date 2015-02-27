@@ -81,6 +81,7 @@ public class ScanResultTask extends PeriodicTask<ScanResultTaskParameters, ScanR
             target.networkId = networkId;
             mWifiManager.updateNetwork(target);
         }
+        mWifiManager.enableNetwork(networkId, false);
         return networkId;
     }
 
@@ -103,7 +104,8 @@ public class ScanResultTask extends PeriodicTask<ScanResultTaskParameters, ScanR
         logScanResult();
 
         if (!mWifiManager.isWifiEnabled()) {
-            Log.d(TAG, "Wifi disabled by user.");
+            Log.d(TAG, "Wifi disabled by user, enabling");
+            mWifiManager.setWifiEnabled(true);
             return;
         }
 
@@ -115,8 +117,15 @@ public class ScanResultTask extends PeriodicTask<ScanResultTaskParameters, ScanR
                 }
                 else {
                     Log.d(TAG, "Found " + result.SSID + " with RSSI = " + result.level + " dBm.");
-                    ssids.add(result.SSID);
+                    ssids.add(Utils.stripQuotes(result.SSID));
                 }
+            }
+        }
+
+        for (WifiConfiguration config : mWifiManager.getConfiguredNetworks()) {
+            if (!Utils.stripQuotes(config.SSID).startsWith(mParameters.targetSSIDPrefix)) {
+                Log.d(TAG, "Disabling SSID " + config.SSID);
+                mWifiManager.disableNetwork(config.networkId);
             }
         }
 
@@ -126,13 +135,8 @@ public class ScanResultTask extends PeriodicTask<ScanResultTaskParameters, ScanR
         }
         else {
             for (String ssid : ssids) {
+                Log.d(TAG, "Configuring SSID " + ssid);
                 getOrCreateNetworkId(ssid);
-            }
-        }
-
-        for (WifiConfiguration config : mWifiManager.getConfiguredNetworks()) {
-            if (!ssids.contains(Utils.stripQuotes(config.SSID))) {
-                mWifiManager.disableNetwork(config.networkId);
             }
         }
 
@@ -154,6 +158,8 @@ public class ScanResultTask extends PeriodicTask<ScanResultTaskParameters, ScanR
             builder.setAutoCancel(true);
             mNotificationManager.notify(WIFI_NOTIFICATION_ID, builder.build());
             mLastPrompt = System.currentTimeMillis();
+
+            mWifiManager.reassociate();
         }
     }
 
