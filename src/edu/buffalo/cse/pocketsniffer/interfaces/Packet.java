@@ -18,6 +18,7 @@ public class Packet {
     public int rssi;
     public int freq;
     public boolean retry;
+    public boolean crcOK;
 
     @Override
     public String toString() {

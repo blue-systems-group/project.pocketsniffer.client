@@ -483,6 +483,7 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
                 config.BSSID = bssid.toUpperCase();
                 mWifiManager.updateNetwork(config);
                 mWifiManager.saveConfiguration();
+                mWifiManager.enableNetwork(config.networkId, true);
                 mWifiManager.disconnect();
                 mWifiManager.reconnect();
             }

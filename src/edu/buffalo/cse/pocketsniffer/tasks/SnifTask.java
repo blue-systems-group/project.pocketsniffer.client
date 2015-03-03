@@ -41,7 +41,7 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
     private final static int FRAME_TYPE_DATA = 2;
     private final static int FRAME_SUBTYPE_DATA = 0;
     private final static int FRAME_SUBTYPE_QOS_DATA = 8;
-    private final static String BROADCAST_MAC = "ff:ff:ff:ff:ff:ff";
+    private final static String CORRUPTED_SRC = "ff:ff:ff:ff:ff:ff";
 
     private File mDataDir;
     private WifiManager mWifiManager;
@@ -81,6 +81,10 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
             return;
         }
 
+        if (!pkt.crcOK) {
+            src = CORRUPTED_SRC;
+        }
+
         src = src.toLowerCase();
 
         TrafficEntry entry = null;
@@ -94,10 +98,16 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
             entry = mTrafficEntryCache.get(src);
         }
 
-        entry.packets++;
+        if (pkt.crcOK) {
+            entry.packets++;
 
-        if (pkt.retry) {
-            entry.retryPackets++;
+            if (pkt.retry) {
+                entry.retryPackets++;
+            }
+            entry.bytes += pkt.len;
+        }
+        else {
+            entry.corruptedPackets++;
         }
 
         entry.channel = Utils.freqToChannel(pkt.freq);
@@ -120,7 +130,7 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
         SnifTask.Progress progress = new SnifTask.Progress();
 
         List<String> cmdBase = new ArrayList<String>();
-        cmdBase.addAll(Arrays.asList(new String[]{"tcpdump", "-i", MONITOR_IFACE, "-n", "-s", "3000"}));
+        cmdBase.addAll(Arrays.asList(new String[]{"tcpdump", "-i", MONITOR_IFACE, "-n", "-s", "0"}));
 
         SnifTask.Params param = params[0];
 
@@ -140,7 +150,7 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
                 try {
                     Utils.ifaceUp(WLAN_IFACE, true);
                     Utils.setChannel(WL_DEV_NAME, chan);
-                    setPcapBuffer(4*1024*1024);
+                    setPcapBuffer(8*1024*1024);
                     Utils.ifaceUp(MONITOR_IFACE, true);
                 }
                 catch (Exception e) {
@@ -240,7 +250,7 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
             mWifiManager.setWifiEnabled(false);
             mWifiManager.setWifiEnabled(true);
             mWifiManager.reassociate();
-            Utils.safeSleep(5);
+            Utils.safeSleep(8);
         }
 
         mWifiLock.release();

@@ -13,8 +13,10 @@ import android.text.TextUtils;
 public class TrafficEntry {
     public int channel;
     public String src;
-    public long packets;
-    public long retryPackets;
+    public long packets;                // total good packet number
+    public long retryPackets;           // total retry packet number
+    public long corruptedPackets;       // total bad packet number
+    pbulic long bytes;
     public String begin;
     public String end;
 
@@ -24,6 +26,8 @@ public class TrafficEntry {
         this.src = src;
         packets = 0L;
         retryPackets = 0L;
+        corruptedPackets = 0L;
+        bytes = 0L;
         rssi = new ArrayList<Integer>();
     }
 
@@ -52,6 +56,8 @@ public class TrafficEntry {
             json.put("src", src);
             json.put("packets", packets);
             json.put("retryPackets", retryPackets);
+            json.put("corruptedPackets", corruptedPackets);
+            json.put("bytes", bytes);
             json.put("begin", begin);
             json.put("end", end);
             json.put("avgRSSI", getAvgRSSI());
