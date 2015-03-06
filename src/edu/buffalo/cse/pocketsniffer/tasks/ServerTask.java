@@ -98,13 +98,6 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
     }
 
     public void startServerThread() {
-        if (mServerThread != null && (System.currentTimeMillis() - mServerThread.lastAccept) > (mParameters.acceptTimeoutSec+120)*1000) {
-            Log.d(TAG, "Server thread is dead.");
-            mServerThread.interrupt();
-            closeServerSocket();
-            mServerThread = null;
-        }
-
         if (mServerThread == null || mServerThread.getState() == Thread.State.TERMINATED) {
             Log.d(TAG, "Creating server thread.");
             mServerThread = new ServerThread(mParameters.serverPort);
@@ -153,7 +146,6 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
     protected void check(ServerTaskParameters arg0) throws Exception {
         if (!mWifiManager.isWifiEnabled()) {
             Log.d(TAG, "Enabling Wifi.");
-            mWifiManager.setWifiEnabled(false);
             mWifiManager.setWifiEnabled(true);
             mWifiManager.reassociate();
             Utils.safeSleep(1);
@@ -585,7 +577,7 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
             try {
                 Log.d(TAG, "Sending reply: " + reply.toString());
                 OutputStream os = new BufferedOutputStream(connection.getOutputStream());
-                os.write(reply.toString().getBytes(Charset.forName("utf-8")));
+                os.write(Utils.compress(reply.toString()));
                 os.flush();
                 os.close();
             }
