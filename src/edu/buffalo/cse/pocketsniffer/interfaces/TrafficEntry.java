@@ -16,7 +16,7 @@ public class TrafficEntry {
     public long packets;                // total good packet number
     public long retryPackets;           // total retry packet number
     public long corruptedPackets;       // total bad packet number
-    pbulic long bytes;
+    public long bytes;
     public String begin;
     public String end;
 

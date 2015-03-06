@@ -78,6 +78,7 @@ public class ScanResultTask extends PeriodicTask<ScanResultTaskParameters, ScanR
             networkId = mWifiManager.addNetwork(target);
         }
         else {
+            target.BSSID = null;
             target.networkId = networkId;
             mWifiManager.updateNetwork(target);
         }
