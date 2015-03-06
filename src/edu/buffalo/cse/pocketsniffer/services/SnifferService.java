@@ -4,15 +4,18 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
 
+import android.app.Notification;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.drawable.BitmapDrawable;
 import android.os.IBinder;
 import android.util.Log;
 
 import edu.buffalo.cse.phonelab.toolkit.android.periodictask.PeriodicTask;
 import edu.buffalo.cse.phonelab.toolkit.android.services.ManifestService;
 import edu.buffalo.cse.phonelab.toolkit.android.services.UploaderService;
+import edu.buffalo.cse.pocketsniffer.R;
 import edu.buffalo.cse.pocketsniffer.utils.LocalUtils;
 
 public class SnifferService extends Service {
@@ -24,6 +27,8 @@ public class SnifferService extends Service {
 
     public static final String MANIFEST_SERVICE_INTENT = "edu.buffalo.cse.pocketsniffer.services.ManifestService";
     public static final String UPLOADER_SERVICE_INTENT = "edu.buffalo.cse.pocketsniffer.services.UploaderService";
+
+    private final static int FOREGROUND_NOTIFICATION_ID = 1234;
 
     private boolean mStarted = false;
     private Context mContext;
@@ -64,6 +69,17 @@ public class SnifferService extends Service {
             Log.d(TAG, "Starting " + entry.getKey());
             entry.getValue().start();
         }
+
+        Notification.Builder builder = new Notification.Builder(mContext);
+
+        builder.setSmallIcon(R.drawable.ic_launcher);
+        builder.setLargeIcon(((BitmapDrawable) mContext.getResources().getDrawable(R.drawable.wifi)).getBitmap());
+        builder.setContentTitle("PocketSniffer");
+        builder.setTicker("PocketSniffer service started.");
+        builder.setContentText("PocketSniffer service is running.");
+        builder.setSubText("LEAVE IT ALONE!");
+
+        startForeground(FOREGROUND_NOTIFICATION_ID, builder.build());
 
         mStarted = true;
         return START_STICKY;
