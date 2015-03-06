@@ -60,7 +60,7 @@ public class LocalUtils {
         String err = "";
 
         try {
-            results = Utils.call(cmd, -1 /* no timeout */, false /* no su */);
+            results = Utils.call(cmd, -1 /* no timeout */, true /* no su */);
             retVal = (Integer) results[0];
             output = (String) results[1];
             err = (String) results[2];

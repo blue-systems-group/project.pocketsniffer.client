@@ -366,7 +366,7 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
             entry.put("pingArgs", pingArgs);
 
             String cmd = "ping " + pingArgs;
-            String output = (String) Utils.call(cmd, -1 /* no timeout*/, false /* require su */)[1];
+            String output = (String) Utils.call(cmd, -1 /* no timeout*/, true /* require su */)[1];
             parsePingOutput(output, entry);
 
             array.put(entry);
@@ -388,7 +388,7 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
             entry.put("iperfArgs", iperfArgs);
 
             String cmd = "iperf " + iperfArgs;
-            String output = (String) Utils.call(cmd, -1 /* no timeout*/, false /* require su */)[1];
+            String output = (String) Utils.call(cmd, -1 /* no timeout*/, true /* require su */)[1];
             parseIperfOutput(output, entry);
 
             array.put(entry);
