@@ -1,6 +1,8 @@
 package edu.buffalo.cse.pocketsniffer.tasks;
 
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import org.json.JSONObject;
@@ -54,36 +56,47 @@ public class ScanResultTask extends PeriodicTask<ScanResultTaskParameters, ScanR
      * @return networkId of PocketSniffer network.
      */
     private int getOrCreateNetworkId(String ssid) {
-        int networkId = -1;
-        for (WifiConfiguration config : mWifiManager.getConfiguredNetworks()) {
-            if (ssid.equals(Utils.stripQuotes(config.SSID))) {
-                if (networkId == -1) {
-                    // reuse network id from previous configration.
-                    networkId = config.networkId;
+        WifiConfiguration config = null;
+        for (WifiConfiguration cfg : mWifiManager.getConfiguredNetworks()) {
+            if (ssid.equals(Utils.stripQuotes(cfg.SSID))) {
+                if (config == null) {
+                    config = cfg;
                 }
                 else {
-                    // remove any duplicate entries
-                    mWifiManager.removeNetwork(config.networkId);
+                    mWifiManager.removeNetwork(cfg.networkId);
                 }
             }
         }
 
-        WifiConfiguration target = new WifiConfiguration();
-        target.SSID = Utils.addQuotes(ssid);
-        target.preSharedKey = Utils.addQuotes(mParameters.preSharedKey);
-        target.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WPA_PSK, true);
-        target.allowedAuthAlgorithms.set(WifiConfiguration.AuthAlgorithm.OPEN, true);
-
-        if (networkId == -1) {
-            networkId = mWifiManager.addNetwork(target);
+        if (config != null) {
+            WifiInfo info = mWifiManager.getConnectionInfo();
+            if (info == null || info.getSSID() == null || !Utils.stripQuotes(info.getSSID()).startsWith(mParameters.targetSSIDPrefix)) {
+                Log.d(TAG, "Removing stale Wifi config.");
+                mWifiManager.removeNetwork(config.networkId);
+                config = new WifiConfiguration();
+                config.networkId = -1;
+                mWifiManager.setWifiEnabled(false);
+                mWifiManager.setWifiEnabled(true);
+            }
         }
         else {
-            target.BSSID = null;
-            target.networkId = networkId;
-            mWifiManager.updateNetwork(target);
+            config = new WifiConfiguration();
+            config.networkId = -1;
         }
-        mWifiManager.enableNetwork(networkId, false);
-        return networkId;
+
+        config.SSID = Utils.addQuotes(ssid);
+        config.preSharedKey = Utils.addQuotes(mParameters.preSharedKey);
+        config.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WPA_PSK, true);
+        config.allowedAuthAlgorithms.set(WifiConfiguration.AuthAlgorithm.OPEN, true);
+
+        if (config.networkId == -1) {
+            mWifiManager.addNetwork(config);
+        }
+        else {
+            mWifiManager.updateNetwork(config);
+        }
+        mWifiManager.enableNetwork(config.networkId, false);
+        return config.networkId;
     }
 
     private void logScanResult() {
@@ -130,14 +143,15 @@ public class ScanResultTask extends PeriodicTask<ScanResultTaskParameters, ScanR
             }
         }
 
+        List<Integer> networkIds = new ArrayList<Integer>();
+
         if (ssids.size() == 0) {
             Log.d(TAG, "No PocketSniffer Wifi found.");
-            mNotificationManager.cancel(WIFI_NOTIFICATION_ID);
         }
         else {
             for (String ssid : ssids) {
                 Log.d(TAG, "Configuring SSID " + ssid);
-                getOrCreateNetworkId(ssid);
+                networkIds.add(getOrCreateNetworkId(ssid));
             }
         }
 
@@ -146,20 +160,8 @@ public class ScanResultTask extends PeriodicTask<ScanResultTaskParameters, ScanR
             Log.d(TAG, "Already connected to " + info.getSSID());
             mNotificationManager.cancel(WIFI_NOTIFICATION_ID);
         }
-        else if (System.currentTimeMillis() - mLastPrompt > mParameters.promptIntervalSec*1000) {
-            Notification.Builder builder = new Notification.Builder(mContext);
-
-            builder.setSmallIcon(R.drawable.ic_launcher);
-            builder.setLargeIcon(((BitmapDrawable) mContext.getResources().getDrawable(R.drawable.wifi)).getBitmap());
-            builder.setContentTitle("PocketSniffer");
-            builder.setTicker("PocketSniffer Wifi available!");
-            builder.setContentText("PocketSniffer Wifi found.");
-            builder.setSubText("Click to connect.");
-            builder.setContentIntent(PendingIntent.getActivity(mContext, 0, new Intent(WifiManager.ACTION_PICK_WIFI_NETWORK), PendingIntent.FLAG_ONE_SHOT));
-            builder.setAutoCancel(true);
-            mNotificationManager.notify(WIFI_NOTIFICATION_ID, builder.build());
-            mLastPrompt = System.currentTimeMillis();
-
+        else if (networkIds.size() > 0) {
+            Log.d(TAG, "Force connectting to PocketSniffer Wifi.");
             mWifiManager.reassociate();
         }
     }
