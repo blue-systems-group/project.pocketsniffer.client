@@ -150,7 +150,7 @@ public class SnifTask extends Task<SnifTask.Params, SnifTask.Progress, SnifTask.
                 try {
                     Utils.ifaceUp(WLAN_IFACE, true);
                     Utils.setChannel(WL_DEV_NAME, chan);
-                    setPcapBuffer(8*1024*1024);
+                    setPcapBuffer(32*1024*1024);
                     Utils.ifaceUp(MONITOR_IFACE, true);
                 }
                 catch (Exception e) {
