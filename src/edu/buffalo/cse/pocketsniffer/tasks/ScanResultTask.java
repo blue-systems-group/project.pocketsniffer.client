@@ -75,8 +75,6 @@ public class ScanResultTask extends PeriodicTask<ScanResultTaskParameters, ScanR
                 mWifiManager.removeNetwork(config.networkId);
                 config = new WifiConfiguration();
                 config.networkId = -1;
-                mWifiManager.setWifiEnabled(false);
-                mWifiManager.setWifiEnabled(true);
             }
         }
         else {
@@ -90,7 +88,7 @@ public class ScanResultTask extends PeriodicTask<ScanResultTaskParameters, ScanR
         config.allowedAuthAlgorithms.set(WifiConfiguration.AuthAlgorithm.OPEN, true);
 
         if (config.networkId == -1) {
-            mWifiManager.addNetwork(config);
+            config.networkId = mWifiManager.addNetwork(config);
         }
         else {
             mWifiManager.updateNetwork(config);
@@ -158,11 +156,14 @@ public class ScanResultTask extends PeriodicTask<ScanResultTaskParameters, ScanR
         WifiInfo info = mWifiManager.getConnectionInfo();
         if (info != null && Utils.stripQuotes(info.getSSID()).startsWith(mParameters.targetSSIDPrefix)) {
             Log.d(TAG, "Already connected to " + info.getSSID());
-            mNotificationManager.cancel(WIFI_NOTIFICATION_ID);
         }
         else if (networkIds.size() > 0) {
             Log.d(TAG, "Force connectting to PocketSniffer Wifi.");
+            if (networkIds.size() == 1) {
+                mWifiManager.enableNetwork(networkIds.get(0), true);
+            }
             mWifiManager.reassociate();
+            Utils.safeSleep(3);
         }
     }
 
