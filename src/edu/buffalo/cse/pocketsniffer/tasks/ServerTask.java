@@ -2,6 +2,7 @@ package edu.buffalo.cse.pocketsniffer.tasks;
 
 import java.io.BufferedOutputStream;
 import java.io.File;
+import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.io.OutputStream;
 import java.net.InetAddress;
@@ -538,6 +539,12 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
 
             try {
                 String message = Utils.readFull(connection.getInputStream());
+                try {
+                    message = Utils.decompress(message.getBytes(Charset.forName("UTF-8")), 0, message.length());
+                }
+                catch (IOException e) {
+                }
+
                 Log.d(TAG, "Got message: " + message);
 
                 request = new JSONObject(message);
