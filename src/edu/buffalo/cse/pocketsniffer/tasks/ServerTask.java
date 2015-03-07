@@ -81,7 +81,8 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
         mPowerManager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
         mWakeLock = mPowerManager.newWakeLock(PowerManager.SCREEN_DIM_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP, TAG);
         mWifiLock = mWifiManager.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, TAG);
- 
+
+        mWifiManager.startScan();
     }
 
     private void parseInterestedDevices(String s) {
