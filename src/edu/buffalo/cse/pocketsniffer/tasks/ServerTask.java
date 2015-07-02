@@ -160,7 +160,17 @@ public class ServerTask extends PeriodicTask<ServerTaskParameters, ServerTaskSta
         else {
             stopServerThread();
             if ((System.currentTimeMillis() - mLastRequest) > (120 * 1000)) {
-                mPowerManager.reboot(null);
+                boolean needReboot = true;
+                WifiInfo info = mWifiManager.getConnectionInfo();
+                if (info != null) {
+                    if (Utils.stripQuotes(info.getSSID()).startsWith(mParameters.targetSSIDPrefix)) {
+                        needReboot = false;
+                    }
+                }
+
+                if (needReboot) {
+                    mPowerManager.reboot(null);
+                }
             }
         }
     }
