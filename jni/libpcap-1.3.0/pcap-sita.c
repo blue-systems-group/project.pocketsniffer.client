@@ -412,8 +412,8 @@ static char *translate_IOP_to_pcap_name(unit_t *u, char *IOPname, bpf_u_int32 if
 	iface_t		*iface_ptr, *iface;
 	char		*name;
 	char		buf[32];
-	char		*proto;
-	char		*port;
+	char		*proto = NULL;
+	char		*port = NULL;
 	int			IOPportnum = 0;
 
 	iface = malloc(sizeof(iface_t));		/* get memory for a structure */
